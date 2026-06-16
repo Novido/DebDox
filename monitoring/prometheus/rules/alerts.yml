@@ -1,0 +1,34 @@
+groups:
+  - name: debdox
+    rules:
+      - alert: HighCPU
+        expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+
+      - alert: HighMemory
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+
+      - alert: DiskFull
+        expr: (1 - node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 > 85
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk nearly full on {{ $labels.instance }}: {{ $labels.mountpoint }}"
+
+      - alert: ContainerDown
+        expr: absent(container_last_seen{name!=""}) == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container down: {{ $labels.name }}"

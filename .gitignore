@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+out/
+
+# Build artifacts
+iso-builder/cache/
+iso-builder/chroot/
+iso-builder/binary/
+iso-builder/build.log
+dist/
+
+# Environment
+*.env
+.env.local
+.env.production
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.sqlite3
+
+# Secrets
+*.pem
+*.key

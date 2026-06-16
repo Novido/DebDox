@@ -1,0 +1,21 @@
+[Unit]
+Description=DebDox MCP Server (AI Integration)
+Documentation=https://github.com/debdox/debdox
+After=debdox-api.service
+Requires=debdox-api.service
+
+[Service]
+Type=exec
+User=debdox
+Group=debdox
+WorkingDirectory=/opt/debdox/mcp
+EnvironmentFile=-/etc/debdox/mcp.env
+ExecStart=/opt/debdox/mcp/.venv/bin/python -m src.server
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=debdox-mcp
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,29 @@
+[Unit]
+Description=DebDox REST API
+Documentation=https://github.com/debdox/debdox
+After=network.target docker.service libvirtd.service
+Wants=docker.service libvirtd.service
+
+[Service]
+Type=exec
+User=debdox
+Group=debdox
+WorkingDirectory=/opt/debdox/api
+ExecStart=/opt/debdox/api/.venv/bin/uvicorn src.main:app \
+    --host 0.0.0.0 \
+    --port 8080 \
+    --workers 2 \
+    --log-level info
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=debdox-api
+
+# Security hardening
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

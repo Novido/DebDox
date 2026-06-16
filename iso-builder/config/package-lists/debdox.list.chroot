@@ -1,0 +1,65 @@
+# DebDox base system packages
+
+# Kernel & boot
+linux-image-amd64
+linux-headers-amd64
+firmware-linux
+firmware-linux-nonfree
+grub-efi-amd64
+efibootmgr
+
+# KVM / QEMU / libvirt
+qemu-kvm
+qemu-utils
+libvirt-daemon-system
+libvirt-clients
+ovmf
+virtinst
+bridge-utils
+cpu-checker
+
+# Docker CE dependencies (Docker CE itself installed via hook)
+apt-transport-https
+ca-certificates
+curl
+gnupg
+lsb-release
+
+# ZFS (installed via hook from OpenZFS repo)
+zfsutils-linux
+zfs-dkms
+
+# Network
+iproute2
+iptables
+nftables
+openvswitch-switch
+vlan
+
+# Python runtime (for debdox-api and debdox-agent)
+python3
+python3-pip
+python3-venv
+python3-dev
+
+# Nginx (serves debdox-ui static files)
+nginx
+
+# System utilities
+systemd
+dbus
+sudo
+openssh-server
+htop
+lsof
+net-tools
+rsync
+borgbackup
+jq
+vim
+less
+
+# TUI installer support
+dialog
+whiptail
+parted

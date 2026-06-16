@@ -1,0 +1,53 @@
+.card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 10px !important;
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: grab;
+  user-select: none;
+}
+
+.header:active {
+  cursor: grabbing;
+}
+
+.icon {
+  font-size: 16px;
+  color: #29a6ba;
+  display: flex;
+  align-items: center;
+}
+
+.title {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dragIcon {
+  color: rgba(255, 255, 255, 0.2);
+  font-size: 16px;
+  transition: color 0.15s;
+}
+
+.header:hover .dragIcon {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.body {
+  flex: 1;
+  padding: 12px 14px;
+  overflow: auto;
+  font-size: 13px;
+}

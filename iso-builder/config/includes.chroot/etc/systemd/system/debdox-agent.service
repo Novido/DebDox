@@ -1,0 +1,20 @@
+[Unit]
+Description=DebDox Node Agent
+Documentation=https://github.com/debdox/debdox
+After=network.target docker.service
+
+[Service]
+Type=exec
+User=debdox
+Group=debdox
+WorkingDirectory=/opt/debdox/agent
+EnvironmentFile=-/etc/debdox/agent.env
+ExecStart=/opt/debdox/agent/.venv/bin/python -m src.agent
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=debdox-agent
+
+[Install]
+WantedBy=multi-user.target

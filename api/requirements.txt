@@ -1,0 +1,14 @@
+fastapi[standard]
+uvicorn[standard]
+pydantic
+pydantic-settings
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+libvirt-python
+docker
+websockets
+aiofiles
+aiosqlite
+sqlalchemy[asyncio]
+borgbackup

@@ -1,0 +1,5 @@
+websockets
+psutil
+docker
+libvirt-python
+aiofiles
