@@ -6,3 +6,5 @@ export * from "./networks";
 export * from "./monitoring";
 export * from "./cluster";
 export * from "./users";
+export * from "./gpu";
+export * from "./system";

@@ -26,3 +26,12 @@ async def list_vfio_devices(_=RequireViewer):
 @router.post("/vfio/bind")
 async def bind_vfio(body: VFIOBind, _=RequireAdmin):
     return await gpu_service.bind_vfio(body.pci_address, body.vendor_id, body.device_id)
+
+
+class VFIOUnbind(BaseModel):
+    pci_address: str
+
+
+@router.post("/vfio/unbind")
+async def unbind_vfio(body: VFIOUnbind, _=RequireAdmin):
+    return await gpu_service.unbind_vfio(body.pci_address)

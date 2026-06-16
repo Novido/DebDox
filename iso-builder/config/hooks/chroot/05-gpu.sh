@@ -23,6 +23,8 @@ cat >> /etc/modprobe.d/debdox-vfio.conf <<'EOF'
 # options vfio-pci ids=10de:xxxx,10de:yyyy
 softdep nouveau pre: vfio vfio_pci
 softdep nvidia pre: vfio vfio_pci
+softdep amdgpu pre: vfio vfio_pci
+softdep radeon pre: vfio vfio_pci
 EOF
 
 cat >> /etc/modules-load.d/debdox.conf <<'EOF'
