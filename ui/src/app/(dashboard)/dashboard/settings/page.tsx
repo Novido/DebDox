@@ -1,6 +1,7 @@
 "use client";
 import { Text, Card, Input, Button, Field, TabList, Tab, Badge } from "@fluentui/react-components";
 import { useState } from "react";
+import Link from "next/link";
 
 export default function SettingsPage() {
   const [tab, setTab] = useState("system");
@@ -119,10 +120,11 @@ export default function SettingsPage() {
         <Card style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", padding: 20, maxWidth: 600 }}>
           <Text size={300} weight="semibold" style={{ display: "block", marginBottom: 12 }}>System Updates</Text>
           <Text size={200} style={{ display: "block", marginBottom: 16, opacity: 0.6 }}>
-            DebDox runs on Debian 13 Trixie. The monitoring stack uses :latest images and
-            pulls the latest version automatically on each restart of debdox-monitoring.service.
+            Package updates, APT source management, and upgrade history have moved to the dedicated Update page.
           </Text>
-          <Button appearance="primary">Check for Updates</Button>
+          <Link href="/dashboard/update" style={{ textDecoration: "none" }}>
+            <Button appearance="primary">Go to Update page</Button>
+          </Link>
         </Card>
       )}
     </>

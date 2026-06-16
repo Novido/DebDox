@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import settings
 from src.database import init_db
-from src.routers import auth, users, vms, containers, storage, networks, firewall, gpu, cluster, monitoring, system
+from src.routers import auth, users, vms, containers, storage, networks, firewall, gpu, cluster, monitoring, system, update
 from src.auth.jwt import hash_password
 from src.models.user import User, RoleEnum
 
@@ -66,6 +66,7 @@ app.include_router(gpu.router)
 app.include_router(cluster.router)
 app.include_router(monitoring.router)
 app.include_router(system.router)
+app.include_router(update.router)
 
 
 @app.get("/api/health")

@@ -15,6 +15,7 @@ import {
   ShieldCheckmarkRegular,
   PeopleRegular,
   DataBarVerticalRegular,
+  ArrowSyncRegular,
   SettingsRegular,
   ChevronRightRegular,
 } from "@fluentui/react-icons";
@@ -56,6 +57,7 @@ const NAV: NavEntry[] = [
   { type: "item", label: "Firewall", icon: ShieldCheckmarkRegular, href: "/dashboard/firewall" },
   { type: "item", label: "Users & Access", icon: PeopleRegular, href: "/dashboard/users" },
   { type: "item", label: "Monitoring", icon: DataBarVerticalRegular, href: "/dashboard/monitoring" },
+  { type: "item", label: "Update", icon: ArrowSyncRegular, href: "/dashboard/update" },
   { type: "item", label: "Settings", icon: SettingsRegular, href: "/dashboard/settings" },
 ];
 
