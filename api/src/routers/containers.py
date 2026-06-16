@@ -46,6 +46,24 @@ async def create_container(body: ContainerCreate, _=RequireOperator):
     )
 
 
+class ExecRequest(BaseModel):
+    command: str | list[str]
+    workdir: Optional[str] = None
+
+
+@router.get("/{container_id}/inspect")
+async def inspect_container(container_id: str, _=RequireViewer):
+    ct = await docker_service.inspect_container(container_id)
+    if not ct:
+        raise HTTPException(status_code=404, detail="Container not found")
+    return ct
+
+
+@router.post("/{container_id}/exec")
+async def exec_in_container(container_id: str, body: ExecRequest, _=RequireOperator):
+    return await docker_service.exec_in_container(container_id, body.command, body.workdir)
+
+
 @router.post("/{container_id}/{action}")
 async def container_action(container_id: str, action: str, _=RequireOperator):
     allowed = {"start", "stop", "restart", "pause", "unpause"}

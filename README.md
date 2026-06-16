@@ -157,7 +157,24 @@ DebDox ships a built-in [Model Context Protocol](https://modelcontextprotocol.io
 }
 ```
 
-Available tools: `list_vms`, `start_vm`, `stop_vm`, `list_containers`, `run_container`, `stop_container`, `get_container_logs`, `get_host_metrics`, `list_storage_pools`, `create_snapshot`, `list_nodes`, `get_swarm_status`.
+Available tools:
+
+| Tool | Description |
+|---|---|
+| `list_vms` | List all KVM VMs with status |
+| `start_vm` / `stop_vm` | Start or stop a VM |
+| `list_containers` | List all Docker containers |
+| `inspect_container` | Full container config, mounts, ports |
+| `run_container` | Start a new container (with optional GPU) |
+| `start_container` / `stop_container` / `restart_container` | Lifecycle control |
+| `remove_container` | Remove a container (force flag supported) |
+| `exec_in_container` | **Run a command inside a running container and get output** |
+| `get_container_logs` | Tail container logs |
+| `get_host_metrics` | CPU / RAM / disk for the host |
+| `list_storage_pools` | List ZFS pools |
+| `create_snapshot` | Take a ZFS snapshot |
+| `list_nodes` | List cluster nodes |
+| `get_swarm_status` | Docker Swarm state |
 
 ---
 

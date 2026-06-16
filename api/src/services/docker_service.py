@@ -92,6 +92,31 @@ async def delete_container(container_id: str, force: bool = False) -> None:
     await asyncio.to_thread(_del)
 
 
+async def exec_in_container(
+    container_id: str,
+    command: str | list[str],
+    workdir: str | None = None,
+) -> dict:
+    def _exec():
+        c = _client()
+        ct = c.containers.get(container_id)
+        result = ct.exec_run(command, workdir=workdir, demux=False)
+        return {
+            "exit_code": result.exit_code,
+            "output": result.output.decode("utf-8", errors="replace") if result.output else "",
+        }
+    return await asyncio.to_thread(_exec)
+
+
+async def inspect_container(container_id: str) -> dict:
+    def _inspect():
+        c = _client()
+        ct = c.containers.get(container_id)
+        ct.reload()
+        return ct.attrs
+    return await asyncio.to_thread(_inspect)
+
+
 async def list_docker_networks() -> list[dict]:
     def _nets():
         c = _client()
