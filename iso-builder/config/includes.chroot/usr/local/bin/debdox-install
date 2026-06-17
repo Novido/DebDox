@@ -203,8 +203,8 @@ if [[ "$BOOT_MODE" == "uefi" ]]; then
     cp "${TARGET}/boot/efi/EFI/DebDox/grubx64.efi" \
        "${TARGET}/boot/efi/EFI/BOOT/BOOTX64.EFI" 2>/dev/null || true
 else
-    # Run from live system (not chroot) to avoid environment issues;
-    # grub-pc-bin modules in the live system are used here
+    # Run from live system with explicit boot-directory so GRUB modules
+    # are copied from live's grub-pc-bin into the target's /boot/grub/
     grub-install \
         --target=i386-pc \
         --boot-directory="${TARGET}/boot" \
@@ -212,11 +212,33 @@ else
         "$DISK"
 fi
 
-# Generate grub.cfg inside the chroot so kernel paths and UUIDs are correct
-chroot "$TARGET" grub-mkconfig -o /boot/grub/grub.cfg
+# Find the installed kernel version
+KERNEL_VER=$(ls "${TARGET}/boot/vmlinuz-"* 2>/dev/null \
+    | sort -V | tail -1 | sed 's|.*/vmlinuz-||')
 
-[[ -f "${TARGET}/boot/grub/grub.cfg" ]] \
-    || { echo "ERROR: grub.cfg was not generated"; exit 1; }
+[[ -n "$KERNEL_VER" ]] \
+    || { echo "ERROR: no kernel found in ${TARGET}/boot/"; exit 1; }
+
+echo "    kernel: ${KERNEL_VER}"
+
+# Write grub.cfg directly — avoids grub-mkconfig chroot environment issues
+mkdir -p "${TARGET}/boot/grub"
+cat > "${TARGET}/boot/grub/grub.cfg" <<GRUBCFG
+set default=0
+set timeout=3
+
+insmod part_gpt
+insmod ext2
+insmod gzio
+
+menuentry "DebDox" {
+    search --no-floppy --fs-uuid --set=root ${ROOT_UUID}
+    linux  /boot/vmlinuz-${KERNEL_VER} root=UUID=${ROOT_UUID} ro quiet
+    initrd /boot/initrd.img-${KERNEL_VER}
+}
+GRUBCFG
+
+echo "    grub.cfg written (root UUID=${ROOT_UUID})"
 
 # ── Unmount ───────────────────────────────────────────────────────────────
 umount "${TARGET}/run"                          2>/dev/null || true
