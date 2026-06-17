@@ -169,6 +169,14 @@ if [[ "$BOOT_MODE" == "uefi" ]]; then
         "${TARGET}/sys/firmware/efi/efivars" 2>/dev/null || true
 fi
 
+# Stub update-grub so kernel hooks don't fail during chroot operations.
+# grub-mkconfig cannot probe the disk correctly here; we write grub.cfg
+# manually after grub-install, which overwrites any auto-generated file.
+if [[ -f "${TARGET}/usr/sbin/update-grub" ]]; then
+    cp "${TARGET}/usr/sbin/update-grub" "${TARGET}/usr/sbin/update-grub.bak"
+    printf '#!/bin/sh\nexit 0\n' > "${TARGET}/usr/sbin/update-grub"
+fi
+
 # Remove live-boot packages so the installed system boots normally
 chroot "$TARGET" apt-get purge -y --auto-remove \
     live-boot live-boot-initramfs-tools \
@@ -241,6 +249,11 @@ menuentry "DebDox" {
 GRUBCFG
 
 echo "    grub.cfg written (root UUID=${ROOT_UUID})"
+
+# Restore update-grub (needed for future kernel upgrades on installed system)
+if [[ -f "${TARGET}/usr/sbin/update-grub.bak" ]]; then
+    mv "${TARGET}/usr/sbin/update-grub.bak" "${TARGET}/usr/sbin/update-grub"
+fi
 
 # ── Unmount ───────────────────────────────────────────────────────────────
 umount "${TARGET}/run"                          2>/dev/null || true
