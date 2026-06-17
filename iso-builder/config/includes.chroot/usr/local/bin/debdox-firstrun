@@ -70,12 +70,16 @@ GATEWAY=$(W --title " Default Gateway " \
 HOST_IP="${STATIC_CIDR%%/*}"
 PREFIX="${STATIC_CIDR##*/}"
 
-# ── 4. Admin password ─────────────────────────────────────────────────────
+# ── 4. Admin account ──────────────────────────────────────────────────────
+ADMIN_USER=$(W --title " Admin Account " \
+    --inputbox "Admin username for the web UI:" 9 62 "admin")
+[[ -z "$ADMIN_USER" ]] && ADMIN_USER="admin"
+
 while true; do
     PASS1=$(W --title " Admin Password " \
-        --passwordbox "Set the DebDox admin password:" 9 62)
+        --passwordbox "Set the password for '${ADMIN_USER}':" 9 62)
     PASS2=$(W --title " Admin Password " \
-        --passwordbox "Confirm admin password:" 9 62)
+        --passwordbox "Confirm password:" 9 62)
     if [[ -n "$PASS1" && "$PASS1" == "$PASS2" ]]; then
         break
     fi
@@ -130,8 +134,9 @@ W --title " Confirm Settings " --yesno \
   Interface : ${NET_IFACE}\n\
   IP address: ${HOST_IP}/${PREFIX}\n\
   Gateway   : ${GATEWAY}\n\
+  Admin user: ${ADMIN_USER}\n\
   ZFS pool  : ${ZFS_SUMMARY}\n" \
-14 62
+15 62
 
 clear
 echo ""
@@ -173,6 +178,7 @@ echo "root:${PASS1}" | chpasswd
 mkdir -p /opt/debdox/data
 cat > "${CONF}/api.env" <<EOF
 SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+DEBDOX_ADMIN_USERNAME=${ADMIN_USER}
 DEBDOX_ADMIN_PASSWORD=${PASS1}
 DB_URL=sqlite:////opt/debdox/data/debdox.db
 EOF

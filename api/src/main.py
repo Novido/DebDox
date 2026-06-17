@@ -29,7 +29,7 @@ async def _seed_admin():
         count = await db.execute(select(func.count()).select_from(User))
         if count.scalar() == 0:
             admin = User(
-                username="admin",
+                username=os.environ.get("DEBDOX_ADMIN_USERNAME", "admin"),
                 hashed_password=hash_password(os.environ.get("DEBDOX_ADMIN_PASSWORD", "DebDox!Change")),
                 role=RoleEnum.admin,
                 is_active=True,
