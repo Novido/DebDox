@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +12,12 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
+
+    # Initial admin account, seeded on first boot from /etc/debdox/api.env.
+    # Read via pydantic so seeding works regardless of the service's
+    # EnvironmentFile being loaded.
+    admin_username: str = Field(default="admin", validation_alias="DEBDOX_ADMIN_USERNAME")
+    admin_password: str = Field(default="DebDox!Change", validation_alias="DEBDOX_ADMIN_PASSWORD")
 
     db_url: str = "sqlite+aiosqlite:////var/lib/debdox/debdox.db"
 

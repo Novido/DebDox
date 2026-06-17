@@ -9,6 +9,7 @@ Type=exec
 User=debdox
 Group=debdox
 WorkingDirectory=/opt/debdox/api
+EnvironmentFile=-/etc/debdox/api.env
 ExecStart=/opt/debdox/api/.venv/bin/uvicorn src.main:app \
     --host 0.0.0.0 \
     --port 8080 \

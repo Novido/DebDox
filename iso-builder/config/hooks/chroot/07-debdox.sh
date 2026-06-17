@@ -8,6 +8,11 @@ DEBDOX_DIR="/opt/debdox"
 useradd --system --no-create-home --shell /usr/sbin/nologin \
     --groups libvirt,docker,kvm debdox 2>/dev/null || true
 
+# Writable data/database directory owned by the service user.
+# The API stores its SQLite DB in /var/lib/debdox (see api/src/config.py).
+mkdir -p /var/lib/debdox /opt/debdox/data
+chown -R debdox:debdox /var/lib/debdox /opt/debdox/data
+
 # --- Web layer (nginx config is static via includes.chroot) ---
 # Ensure nginx (www-data) can traverse to and read the UI served from /opt/debdox.
 chmod a+rx "${DEBDOX_DIR}" "${DEBDOX_DIR}/ui" 2>/dev/null || true

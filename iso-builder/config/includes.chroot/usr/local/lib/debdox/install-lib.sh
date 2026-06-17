@@ -201,12 +201,11 @@ dbx_apply_admin() {
     echo "    admin user : ${ADMIN_USER}"
     echo "root:${ADMIN_PASS}" | chroot "$TARGET" chpasswd
 
-    mkdir -p "${TARGET}/etc/debdox" "${TARGET}/opt/debdox/data"
+    mkdir -p "${TARGET}/etc/debdox"
     cat > "${TARGET}/etc/debdox/api.env" <<EOF
 SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 DEBDOX_ADMIN_USERNAME=${ADMIN_USER}
 DEBDOX_ADMIN_PASSWORD=${ADMIN_PASS}
-DB_URL=sqlite:////opt/debdox/data/debdox.db
 EOF
     chmod 600 "${TARGET}/etc/debdox/api.env"
 
