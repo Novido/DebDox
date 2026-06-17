@@ -53,14 +53,11 @@ export function WindowGrid({ children, widgetIds, defaultLayout }: Props) {
     <div className="wg-container" style={{ width: "100%" }}>
       <GridLayout
         layout={layout}
-        cols={12}
-        rowHeight={80}
         width={width}
         onLayoutChange={onLayoutChange}
-        draggableHandle=".widget-drag-handle"
-        isResizable
-        isDraggable
-        margin={[16, 16]}
+        gridConfig={{ cols: 12, rowHeight: 80, margin: [16, 16] as [number, number] }}
+        dragConfig={{ enabled: true, handle: ".widget-drag-handle" }}
+        resizeConfig={{ enabled: true }}
       >
         {children.map((child, i) => (
           <div key={widgetIds[i]}>
