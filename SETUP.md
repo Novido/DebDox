@@ -72,7 +72,7 @@ Edit [iso-builder/auto/config](iso-builder/auto/config) to change the target Deb
 
 ---
 
-## Step 3 — Build the UI (required before building ISO)
+## Step 3 — Build the UI and copy all sources into the ISO
 
 The ISO includes a pre-built Next.js static export. Build it first:
 
@@ -82,40 +82,24 @@ cd ui
 npm install
 npm run build
 # Output goes to ui/out/
+cd ..
 ```
 
-Then copy the build into the ISO's includes:
-
-```bash
-cp -r ui/out iso-builder/config/includes.chroot/opt/debdox/ui/out
-```
-
----
-
-## Step 4 — Copy application code into the ISO
-
-The API, agent, and MCP source code must be present in `includes.chroot` so hook `07-debdox.sh` can install them:
+Then run the helper script to create all required directories and copy everything into the ISO includes:
 
 ```bash
 # From the repo root
-cp -r api  iso-builder/config/includes.chroot/opt/debdox/api
-cp -r agent iso-builder/config/includes.chroot/opt/debdox/agent
-cp -r mcp  iso-builder/config/includes.chroot/opt/debdox/mcp
-cp -r monitoring iso-builder/config/includes.chroot/opt/debdox/monitoring
-cp -r systemd/* iso-builder/config/includes.chroot/etc/systemd/system/
+bash scripts/prepare-iso-includes.sh
 ```
 
-Or run the helper script (once created):
-
-```bash
-./scripts/prepare-iso-includes.sh
-```
+This copies the UI build, API, agent, MCP server, monitoring stack and systemd units into `iso-builder/config/includes.chroot/`.
 
 ---
 
-## Step 5 — Build the ISO
+## Step 4 — Build the ISO
 
 ```bash
+# From the repo root
 cd iso-builder
 sudo ./build.sh
 ```
@@ -143,7 +127,7 @@ tail -100 iso-builder/build.log
 
 ---
 
-## Step 6 — Flash to USB (for bare-metal install)
+## Step 5 — Flash to USB (for bare-metal install)
 
 ```bash
 # Replace /dev/sdX with your USB drive — THIS WILL ERASE IT
@@ -154,7 +138,7 @@ Or use [Balena Etcher](https://etcher.balena.io/) on Windows/macOS.
 
 ---
 
-## Step 7 — Install DebDox on bare-metal
+## Step 6 — Install DebDox on bare-metal
 
 1. Boot the server from the USB drive (set boot order in BIOS/UEFI)
 2. The TUI installer starts automatically
