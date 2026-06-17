@@ -161,17 +161,30 @@ cat > "${TARGET}/etc/hosts" <<'HOSTS'
 HOSTS
 
 # Bind-mount kernel filesystems for chroot operations
-for fs in dev proc sys; do
-    mount --bind "/$fs" "${TARGET}/$fs"
-done
-[[ "$BOOT_MODE" == "uefi" ]] && mount --bind /sys/firmware/efi/efivars \
-    "${TARGET}/sys/firmware/efi/efivars" 2>/dev/null || true
+mount --bind /dev  "${TARGET}/dev"
+mount -t proc  proc  "${TARGET}/proc"
+mount -t sysfs sysfs "${TARGET}/sys"
+mount --bind /run  "${TARGET}/run"
+if [[ "$BOOT_MODE" == "uefi" ]]; then
+    mount --bind /sys/firmware/efi/efivars \
+        "${TARGET}/sys/firmware/efi/efivars" 2>/dev/null || true
+fi
 
 # Remove live-boot packages so the installed system boots normally
 chroot "$TARGET" apt-get purge -y --auto-remove \
     live-boot live-boot-initramfs-tools \
     live-config live-config-systemd \
     live-tools 2>/dev/null || true
+
+# Write a clean GRUB config before generating grub.cfg
+cat > "${TARGET}/etc/default/grub" <<GRUBDEFAULT
+GRUB_DEFAULT=0
+GRUB_TIMEOUT=3
+GRUB_DISTRIBUTOR="DebDox"
+GRUB_CMDLINE_LINUX_DEFAULT=""
+GRUB_CMDLINE_LINUX="root=UUID=${ROOT_UUID} ro quiet"
+GRUB_DISABLE_OS_PROBER=true
+GRUBDEFAULT
 
 # Regenerate initramfs without live hooks
 chroot "$TARGET" update-initramfs -u -k all
@@ -183,20 +196,34 @@ if [[ "$BOOT_MODE" == "uefi" ]]; then
         --target=x86_64-efi \
         --efi-directory=/boot/efi \
         --bootloader-id=DebDox \
+        --no-nvram \
         --recheck
+    # Ensure fallback EFI path exists for firmware that ignores BootOrder
+    mkdir -p "${TARGET}/boot/efi/EFI/BOOT"
+    cp "${TARGET}/boot/efi/EFI/DebDox/grubx64.efi" \
+       "${TARGET}/boot/efi/EFI/BOOT/BOOTX64.EFI" 2>/dev/null || true
 else
-    chroot "$TARGET" grub-install \
+    # Run from live system (not chroot) to avoid environment issues;
+    # grub-pc-bin modules in the live system are used here
+    grub-install \
         --target=i386-pc \
+        --boot-directory="${TARGET}/boot" \
         --recheck \
         "$DISK"
 fi
-chroot "$TARGET" update-grub
+
+# Generate grub.cfg inside the chroot so kernel paths and UUIDs are correct
+chroot "$TARGET" grub-mkconfig -o /boot/grub/grub.cfg
+
+[[ -f "${TARGET}/boot/grub/grub.cfg" ]] \
+    || { echo "ERROR: grub.cfg was not generated"; exit 1; }
 
 # ── Unmount ───────────────────────────────────────────────────────────────
-for fs in dev proc sys; do
-    umount "${TARGET}/$fs" 2>/dev/null || true
-done
-umount "${TARGET}/sys/firmware/efi/efivars" 2>/dev/null || true
+umount "${TARGET}/run"                          2>/dev/null || true
+umount "${TARGET}/sys/firmware/efi/efivars"     2>/dev/null || true
+umount "${TARGET}/sys"                          2>/dev/null || true
+umount "${TARGET}/proc"                         2>/dev/null || true
+umount "${TARGET}/dev"                          2>/dev/null || true
 [[ "$BOOT_MODE" == "uefi" ]] && umount "${TARGET}/boot/efi" 2>/dev/null || true
 umount "$TARGET"
 
