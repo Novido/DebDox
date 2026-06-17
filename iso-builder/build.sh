@@ -5,6 +5,7 @@
 set -euo pipefail
 
 DEBDOX_VERSION="${DEBDOX_VERSION:-1.0.0}"
+BUILD_DATE="$(date +%Y%m%d-%H%M)"
 OUTPUT_DIR="${OUTPUT_DIR:-../dist}"
 ARCH="amd64"
 
@@ -38,7 +39,7 @@ lb build 2>&1 | tee build.log
 mkdir -p "${OUTPUT_DIR}"
 ISO_FILE="live-image-amd64.hybrid.iso"
 if [[ -f "${ISO_FILE}" ]]; then
-    DEST="${OUTPUT_DIR}/debdox-${DEBDOX_VERSION}-${ARCH}.iso"
+    DEST="${OUTPUT_DIR}/debdox-${DEBDOX_VERSION}-${BUILD_DATE}-${ARCH}.iso"
     mv "${ISO_FILE}" "${DEST}"
     echo "==> ISO ready: ${DEST}"
     sha256sum "${DEST}" > "${DEST}.sha256"
