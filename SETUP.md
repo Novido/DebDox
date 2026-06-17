@@ -98,10 +98,18 @@ This copies the UI build, API, agent, MCP server, monitoring stack and systemd u
 
 ## Step 4 — Build the ISO
 
+The build script must run as root. If you are already logged in as root (default on a fresh Debian install):
+
 ```bash
-# From the repo root
 cd iso-builder
-sudo ./build.sh
+./build.sh
+```
+
+If you are logged in as a non-root user, use `su` (Debian does not include `sudo` by default):
+
+```bash
+cd iso-builder
+su -c "bash ./build.sh"
 ```
 
 The build process takes **15–40 minutes** depending on your internet speed and hardware. It will:
