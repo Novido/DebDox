@@ -1,0 +1,36 @@
+# DebDox — overrides the stock nginx default site.
+# Placed via includes.chroot so the web UI works even if the build hook
+# (venv/pip steps) fails. The package's sites-enabled/default symlink
+# already points here, so no symlink management or removal is needed.
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+
+    # Serve the pre-built static UI directly from /opt/debdox (no copy step)
+    root /opt/debdox/ui/out;
+    index index.html;
+
+    # SPA fallback
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy API requests to debdox-api
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 300s;
+    }
+
+    # Proxy MCP requests
+    location /mcp/ {
+        proxy_pass http://127.0.0.1:8765;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+}
