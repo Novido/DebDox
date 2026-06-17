@@ -67,7 +67,7 @@ server {
 EOF
 
 ln -sf /etc/nginx/sites-available/debdox /etc/nginx/sites-enabled/debdox
-rm -f /etc/nginx/sites-enabled/default
+rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/default.conf
 
 # Enable systemd services
 systemctl enable debdox-api
