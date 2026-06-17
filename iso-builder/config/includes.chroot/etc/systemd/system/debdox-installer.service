@@ -1,0 +1,16 @@
+[Unit]
+Description=DebDox Installer
+After=basic.target systemd-udevd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/debdox-install
+ExecStopPost=/sbin/reboot -f
+StandardInput=tty
+StandardOutput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+
+[Install]
+WantedBy=installer.target

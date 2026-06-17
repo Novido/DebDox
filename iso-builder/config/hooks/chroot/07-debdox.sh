@@ -77,4 +77,6 @@ systemctl enable debdox-ui
 systemctl enable debdox-monitoring
 systemctl enable nginx
 
+systemctl enable debdox-installer.service
+
 echo "==> DebDox services enabled"

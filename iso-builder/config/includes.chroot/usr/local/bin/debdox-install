@@ -3,7 +3,6 @@
 set -euo pipefail
 
 [[ $EUID -ne 0 ]] && { echo "Must run as root" >&2; exit 1; }
-[[ ! -d /run/live ]] && { echo "Not in live mode" >&2; exit 1; }
 
 W() { whiptail "$@" 3>&1 1>&2 2>&3; }
 TARGET="/target"

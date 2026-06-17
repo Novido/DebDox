@@ -25,7 +25,7 @@ lb config \
     --architecture "${ARCH}" \
     --distribution trixie \
     --archive-areas "main contrib non-free non-free-firmware" \
-    --bootappend-live "boot=live components locales=en_US.UTF-8 keyboard-layouts=se" \
+    --bootappend-live "boot=live components locales=en_US.UTF-8 keyboard-layouts=se systemd.unit=installer.target" \
     --iso-application "DebDox" \
     --iso-preparer "DebDox Project" \
     --iso-volume "DEBDOX_${DEBDOX_VERSION}" \

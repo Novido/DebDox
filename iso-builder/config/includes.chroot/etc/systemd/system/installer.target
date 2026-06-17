@@ -1,0 +1,5 @@
+[Unit]
+Description=DebDox Installer Target
+Requires=basic.target
+After=basic.target
+AllowIsolate=yes
