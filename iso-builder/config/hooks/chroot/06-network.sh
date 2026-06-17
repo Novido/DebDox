@@ -35,6 +35,7 @@ auto vmbr0
 iface vmbr0 inet static
     address __HOST_IP__/__PREFIX__
     gateway __GATEWAY__
+    dns-nameservers __DNS__
     bridge-ports __IFACE__
     bridge-stp off
     bridge-fd 0
