@@ -212,7 +212,7 @@ ifup vmbr0   2>/dev/null || true
 
 # Start DebDox services
 echo "Starting services..."
-systemctl restart nginx debdox-api debdox-agent debdox-mcp 2>/dev/null || true
+systemctl restart debdox-ui debdox-api debdox-agent debdox-mcp 2>/dev/null || true
 
 # Mark as configured so this wizard never runs again
 touch "$FLAG"

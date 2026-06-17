@@ -73,10 +73,8 @@ rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/default.conf
 systemctl enable debdox-api
 systemctl enable debdox-agent
 systemctl enable debdox-mcp
-systemctl enable debdox-ui
+systemctl enable debdox-ui        # debdox-ui.service wraps nginx; do NOT also enable nginx.service
 systemctl enable debdox-monitoring
-systemctl enable nginx
-
 systemctl enable debdox-installer.service
 
 echo "==> DebDox services enabled"

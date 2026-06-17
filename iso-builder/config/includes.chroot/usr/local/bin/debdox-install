@@ -178,10 +178,15 @@ if [[ -f "${TARGET}/usr/sbin/update-grub" ]]; then
 fi
 
 # Remove live-boot packages so the installed system boots normally
-chroot "$TARGET" apt-get purge -y --auto-remove \
+DEBIAN_FRONTEND=noninteractive chroot "$TARGET" apt-get purge -y --auto-remove \
     live-boot live-boot-initramfs-tools \
     live-config live-config-systemd \
     live-tools 2>/dev/null || true
+
+# Disable the installer service on the installed system — it must only run
+# from the live ISO (triggered by systemd.unit=installer.target on the kernel line)
+chroot "$TARGET" systemctl disable debdox-installer.service 2>/dev/null || true
+rm -f "${TARGET}/etc/systemd/system/installer.target.wants/debdox-installer.service"
 
 # Write a clean GRUB config before generating grub.cfg
 cat > "${TARGET}/etc/default/grub" <<GRUBDEFAULT
