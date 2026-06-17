@@ -211,6 +211,10 @@ systemctl restart nginx debdox-api debdox-agent debdox-mcp 2>/dev/null || true
 # Mark as configured so this wizard never runs again
 touch "$FLAG"
 
+# Disable auto-login now that the system is set up
+rm -f /etc/systemd/system/getty@tty1.service.d/autologin.conf
+systemctl daemon-reload 2>/dev/null || true
+
 echo ""
 echo "Configuration complete."
 sleep 1

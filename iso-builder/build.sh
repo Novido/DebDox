@@ -25,8 +25,6 @@ lb config \
     --architecture "${ARCH}" \
     --distribution trixie \
     --archive-areas "main contrib non-free non-free-firmware" \
-    --debian-installer live \
-    --debian-installer-gui false \
     --bootappend-live "boot=live components locales=en_US.UTF-8 keyboard-layouts=se" \
     --iso-application "DebDox" \
     --iso-preparer "DebDox Project" \

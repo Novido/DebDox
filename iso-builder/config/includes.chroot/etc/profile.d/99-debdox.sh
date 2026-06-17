@@ -1,8 +1,11 @@
 #!/bin/sh
-# DebDox: run setup wizard on first boot, show welcome on subsequent logins
+# DebDox: launch installer in live mode, setup wizard on first boot,
+# welcome banner on subsequent logins
 [ -t 0 ] || return 0
 
-if [ ! -f /etc/debdox/.configured ]; then
+if [ -d /run/live ]; then
+    exec /usr/local/bin/debdox-install
+elif [ ! -f /etc/debdox/.configured ]; then
     /usr/local/bin/debdox-firstrun
 else
     /usr/local/bin/debdox-welcome
