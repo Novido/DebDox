@@ -1,9 +1,5 @@
 #!/bin/sh
-# DebDox: run setup wizard on first boot, show welcome on subsequent logins
+# DebDox: show the welcome dashboard on interactive console/SSH login.
+# All configuration is done by the installer, so there is no first-run wizard.
 [ -t 0 ] || return 0
-
-if [ ! -f /etc/debdox/.configured ]; then
-    /usr/local/bin/debdox-firstrun
-else
-    /usr/local/bin/debdox-welcome
-fi
+[ -x /usr/local/bin/debdox-welcome ] && /usr/local/bin/debdox-welcome

@@ -1,17 +1,44 @@
 #!/usr/bin/env bash
-# DebDox Installer — Terminal (plain text) mode
-# Works on serial consoles, dumb terminals and minimal environments
+# DebDox Installer — Terminal (plain text) mode.
+# Same Proxmox-style single flow as the graphical installer, using plain
+# prompts that work on serial consoles and minimal terminals.
 set -euo pipefail
 
 [[ $EUID -ne 0 ]] && { echo "Must run as root" >&2; exit 1; }
 
-TARGET="/target"
-part() { [[ "$1" == *nvme* || "$1" == *mmcblk* ]] && echo "${1}p${2}" || echo "${1}${2}"; }
+source /usr/local/lib/debdox/install-lib.sh
 
 hr()  { printf '%0.s─' {1..60}; printf '\n'; }
 hdr() { echo ""; hr; printf "  %s\n" "$1"; hr; }
 
-# ── Banner ────────────────────────────────────────────────────────────────
+# ask VAR "Prompt" "default"
+ask() {
+    local __var="$1" __prompt="$2" __def="${3:-}" __ans
+    if [[ -n "$__def" ]]; then
+        printf "  %s [%s]: " "$__prompt" "$__def"
+    else
+        printf "  %s: " "$__prompt"
+    fi
+    read -r __ans
+    [[ -z "$__ans" ]] && __ans="$__def"
+    printf -v "$__var" '%s' "$__ans"
+}
+
+# pick VAR "Prompt" "default" item1 item2 ...
+pick() {
+    local __var="$1" __prompt="$2" __def="$3"; shift 3
+    local opts=("$@") i ans
+    echo ""
+    for i in "${!opts[@]}"; do printf "    %2d) %s\n" "$((i+1))" "${opts[$i]}"; done
+    printf "  %s [%s]: " "$__prompt" "$__def"
+    read -r ans
+    if [[ "$ans" =~ ^[0-9]+$ ]] && (( ans >= 1 && ans <= ${#opts[@]} )); then
+        printf -v "$__var" '%s' "${opts[$((ans-1))]%% *}"
+    else
+        printf -v "$__var" '%s' "$__def"
+    fi
+}
+
 clear
 cat <<'BANNER'
 
@@ -25,239 +52,134 @@ cat <<'BANNER'
 
 BANNER
 
-# ── 1. Welcome ────────────────────────────────────────────────────────────
 hdr "Welcome"
-echo "  This wizard will:"
-echo "    • Partition the selected disk"
-echo "    • Install DebDox to disk"
-echo "    • Install the GRUB bootloader"
-echo ""
-echo "  On first boot a setup wizard will configure network,"
-echo "  admin password and optional ZFS storage pool."
+echo "  This wizard collects all settings, installs DebDox to disk,"
+echo "  and reboots into a ready-to-use system."
 echo ""
 echo "  WARNING: The selected disk will be completely erased."
-echo ""
-printf "  Press Enter to continue, or Ctrl+C to abort: "
-read -r
+printf "\n  Press Enter to continue, or Ctrl+C to abort: "; read -r
 
-# ── 2. Disk selection ─────────────────────────────────────────────────────
+# ── 1. Target disk ────────────────────────────────────────────────────────
 hdr "Target Disk"
-echo "  Available disks:"
-echo ""
+echo "  Available disks:"; echo ""
 lsblk -dno NAME,SIZE,MODEL 2>/dev/null | while read -r name size model; do
     [[ "$name" == loop* || "$name" == sr* ]] && continue
     printf "    /dev/%-14s  %-8s  %s\n" "$name" "$size" "$model"
 done
 echo ""
-
 while true; do
-    printf "  Disk to install on (e.g. sda, nvme0n1): /dev/"
-    read -r DISK_NAME
+    ask DISK_NAME "Disk to install on (e.g. sda, nvme0n1)" ""
     DISK="/dev/${DISK_NAME}"
-    if [[ -b "$DISK" ]]; then
-        break
-    fi
+    [[ -b "$DISK" ]] && break
     echo "  ERROR: ${DISK} not found. Try again."
 done
+if [[ -d /sys/firmware/efi ]]; then BOOT_MODE="uefi"; BOOT_LABEL="UEFI"
+else BOOT_MODE="bios"; BOOT_LABEL="BIOS (Legacy)"; fi
 
-# ── 3. Detect boot mode ───────────────────────────────────────────────────
-if [[ -d /sys/firmware/efi ]]; then
-    BOOT_MODE="uefi"
-    BOOT_LABEL="UEFI"
-else
-    BOOT_MODE="bios"
-    BOOT_LABEL="BIOS (Legacy)"
-fi
+# ── 2. Location & Time Zone ───────────────────────────────────────────────
+hdr "Location & Time Zone"
+pick LOCALE "Select locale" "en_US.UTF-8" \
+    "en_US.UTF-8 (English US)" "en_GB.UTF-8 (English UK)" "sv_SE.UTF-8 (Swedish)" \
+    "nb_NO.UTF-8 (Norwegian)" "da_DK.UTF-8 (Danish)" "fi_FI.UTF-8 (Finnish)" \
+    "de_DE.UTF-8 (German)" "fr_FR.UTF-8 (French)" "es_ES.UTF-8 (Spanish)" \
+    "it_IT.UTF-8 (Italian)" "nl_NL.UTF-8 (Dutch)"
 
-DISK_SIZE=$(lsblk -dno SIZE "$DISK" 2>/dev/null || echo "?")
-DISK_MODEL=$(lsblk -dno MODEL "$DISK" 2>/dev/null || echo "")
+pick KEYMAP "Select keyboard layout" "us" \
+    "us (English US)" "gb (English UK)" "se (Swedish)" "no (Norwegian)" \
+    "dk (Danish)" "fi (Finnish)" "de (German)" "fr (French)" \
+    "es (Spanish)" "it (Italian)" "nl (Dutch)"
+loadkeys "$KEYMAP" 2>/dev/null || true
 
-# ── 4. Confirm ────────────────────────────────────────────────────────────
-hdr "!! WARNING — DISK WILL BE ERASED !!"
-echo "  Disk  : ${DISK}"
-echo "  Size  : ${DISK_SIZE}"
-echo "  Model : ${DISK_MODEL}"
-echo "  Boot  : ${BOOT_LABEL}"
-echo ""
-printf "  Type 'yes' to confirm and start installation: "
-read -r CONFIRM
-if [[ "$CONFIRM" != "yes" ]]; then
+pick TIMEZONE "Select time zone" "UTC" \
+    "Europe/Stockholm" "Europe/Oslo" "Europe/Copenhagen" "Europe/Helsinki" \
+    "Europe/Berlin" "Europe/London" "Europe/Paris" "Europe/Madrid" \
+    "Europe/Rome" "Europe/Amsterdam" "America/New_York" "America/Chicago" \
+    "America/Los_Angeles" "UTC"
+[[ -f "/usr/share/zoneinfo/${TIMEZONE}" ]] || TIMEZONE="UTC"
+
+# ── 3. Administration password ────────────────────────────────────────────
+hdr "Administration"
+ask ADMIN_USER "Admin username for the web UI" "admin"
+while true; do
+    printf "  Password for '%s': " "$ADMIN_USER"; read -rs PASS1; echo ""
+    printf "  Confirm password: "; read -rs PASS2; echo ""
+    [[ -n "$PASS1" && "$PASS1" == "$PASS2" ]] && break
+    echo "  Passwords do not match or are empty. Try again."
+done
+ADMIN_PASS="$PASS1"
+
+# ── 4. Management network ─────────────────────────────────────────────────
+hdr "Management Network"
+ask HOSTNAME "System hostname (FQDN or short name)" "debdox.local"
+
+IFACES=()
+while IFS= read -r iface; do IFACES+=("$iface"); done \
+    < <(ls /sys/class/net/ | grep -Ev '^(lo|docker|virbr|veth|vmbr|bond|dummy)')
+[[ ${#IFACES[@]} -eq 0 ]] && { echo "  ERROR: no network interfaces found."; exit 1; }
+pick NET_IFACE "Select management interface" "${IFACES[0]}" "${IFACES[@]}"
+
+DHCP_CIDR=$(ip -4 addr show "$NET_IFACE" 2>/dev/null | awk '/inet /{print $2}' | head -1 || true)
+DHCP_ADDR="${DHCP_CIDR%%/*}"; DHCP_PREFIX="${DHCP_CIDR##*/}"
+DHCP_GW=$(ip route 2>/dev/null | awk '/^default/{print $3}' | head -1 || true)
+
+ask STATIC_CIDR "Static IP in CIDR (e.g. 192.168.1.100/24)" "${DHCP_ADDR:-192.168.1.100}/${DHCP_PREFIX:-24}"
+HOST_IP="${STATIC_CIDR%%/*}"; PREFIX="${STATIC_CIDR##*/}"
+ask GATEWAY "Default gateway" "${DHCP_GW:-192.168.1.1}"
+
+DEFAULT_DNS=$(awk '/^nameserver/{printf "%s ", $2}' /etc/resolv.conf 2>/dev/null)
+DEFAULT_DNS="${DEFAULT_DNS:-1.1.1.1 8.8.8.8}"
+ask DNS "DNS servers (space separated)" "${DEFAULT_DNS% }"
+
+# ── 5. Optional ZFS storage pool ──────────────────────────────────────────
+hdr "ZFS Storage Pool (optional)"
+ZFS_SELECTED=(); ZFS_TOPO="stripe"
+echo "  Available data disks (excluding the OS disk):"
+AVAIL=()
+while read -r name size type; do
+    [[ "$type" == "disk" ]] || continue
+    [[ "/dev/$name" == "$DISK" ]] && continue
+    AVAIL+=("$name"); printf "    %-12s %s\n" "$name" "$size"
+done < <(lsblk -dno NAME,SIZE,TYPE 2>/dev/null)
+if [[ ${#AVAIL[@]} -gt 0 ]]; then
     echo ""
-    echo "  Installation aborted."
-    exit 1
-fi
-
-# ── 5. Partition ──────────────────────────────────────────────────────────
-echo ""
-echo "==> [1/6] Partitioning ${DISK}..."
-wipefs -a "$DISK" 2>/dev/null || true
-partprobe "$DISK" 2>/dev/null || true
-
-if [[ "$BOOT_MODE" == "uefi" ]]; then
-    parted -s "$DISK" \
-        mklabel gpt \
-        mkpart ESP fat32 1MiB 513MiB \
-        set 1 esp on \
-        mkpart primary ext4 513MiB 100%
-    EFI_PART=$(part "$DISK" 1)
-    ROOT_PART=$(part "$DISK" 2)
-else
-    parted -s "$DISK" \
-        mklabel gpt \
-        mkpart primary 1MiB 2MiB \
-        set 1 bios_grub on \
-        mkpart primary ext4 2MiB 100%
-    ROOT_PART=$(part "$DISK" 2)
-fi
-
-partprobe "$DISK"
-sleep 1
-
-# ── 6. Format ─────────────────────────────────────────────────────────────
-echo "==> [2/6] Formatting partitions..."
-[[ "$BOOT_MODE" == "uefi" ]] && mkfs.fat -F32 -n EFI "$EFI_PART" -q
-mkfs.ext4 -L debdox-root -q -F "$ROOT_PART"
-
-# ── 7. Mount ──────────────────────────────────────────────────────────────
-echo "==> [3/6] Mounting target..."
-mkdir -p "$TARGET"
-mount "$ROOT_PART" "$TARGET"
-if [[ "$BOOT_MODE" == "uefi" ]]; then
-    mkdir -p "${TARGET}/boot/efi"
-    mount "$EFI_PART" "${TARGET}/boot/efi"
-fi
-
-# ── 8. Copy live system to disk ───────────────────────────────────────────
-echo "==> [4/6] Copying system to disk (this takes a few minutes)..."
-rsync -aHAX \
-    --exclude="/dev/*" \
-    --exclude="/proc/*" \
-    --exclude="/sys/*" \
-    --exclude="/tmp/*" \
-    --exclude="/run/*" \
-    --exclude="/mnt/*" \
-    --exclude="/media/*" \
-    --exclude="/target/*" \
-    --exclude="/lost+found" \
-    / "${TARGET}/"
-
-# ── 9. Configure the installed system ─────────────────────────────────────
-echo "==> [5/6] Configuring installed system..."
-
-ROOT_UUID=$(blkid -s UUID -o value "$ROOT_PART")
-{
-    echo "UUID=${ROOT_UUID}  /        ext4  errors=remount-ro  0  1"
-    if [[ "$BOOT_MODE" == "uefi" ]]; then
-        EFI_UUID=$(blkid -s UUID -o value "$EFI_PART")
-        echo "UUID=${EFI_UUID}   /boot/efi  vfat  umask=0077         0  2"
+    ask ZSEL "Disks for storage pool (space separated, blank to skip)" ""
+    if [[ -n "$ZSEL" ]]; then
+        read -ra ZFS_SELECTED <<< "$ZSEL"
+        if [[ ${#ZFS_SELECTED[@]} -ge 2 ]]; then
+            pick ZFS_TOPO "Pool topology" "stripe" "mirror" "raidz1" "stripe"
+        fi
     fi
-    echo "tmpfs            /tmp     tmpfs  defaults,nosuid,nodev  0  0"
-} > "${TARGET}/etc/fstab"
-
-echo "debdox" > "${TARGET}/etc/hostname"
-cat > "${TARGET}/etc/hosts" <<'HOSTS'
-127.0.0.1   localhost
-127.0.1.1   debdox
-::1         localhost ip6-localhost ip6-loopback
-HOSTS
-
-mount --bind /dev  "${TARGET}/dev"
-mount -t proc  proc  "${TARGET}/proc"
-mount -t sysfs sysfs "${TARGET}/sys"
-mount --bind /run  "${TARGET}/run"
-if [[ "$BOOT_MODE" == "uefi" ]]; then
-    mount --bind /sys/firmware/efi/efivars \
-        "${TARGET}/sys/firmware/efi/efivars" 2>/dev/null || true
-fi
-
-if [[ -f "${TARGET}/usr/sbin/update-grub" ]]; then
-    cp "${TARGET}/usr/sbin/update-grub" "${TARGET}/usr/sbin/update-grub.bak"
-    printf '#!/bin/sh\nexit 0\n' > "${TARGET}/usr/sbin/update-grub"
-fi
-
-DEBIAN_FRONTEND=noninteractive chroot "$TARGET" apt-get purge -y --auto-remove \
-    live-boot live-boot-initramfs-tools \
-    live-config live-config-systemd \
-    live-tools 2>/dev/null || true
-
-chroot "$TARGET" systemctl disable debdox-installer.service 2>/dev/null || true
-rm -f "${TARGET}/etc/systemd/system/installer.target.wants/debdox-installer.service"
-
-cat > "${TARGET}/etc/default/grub" <<GRUBDEFAULT
-GRUB_DEFAULT=0
-GRUB_TIMEOUT=3
-GRUB_DISTRIBUTOR="DebDox"
-GRUB_CMDLINE_LINUX_DEFAULT=""
-GRUB_CMDLINE_LINUX="root=UUID=${ROOT_UUID} ro quiet"
-GRUB_DISABLE_OS_PROBER=true
-GRUBDEFAULT
-
-chroot "$TARGET" update-initramfs -u -k all
-
-# ── 10. Install GRUB ──────────────────────────────────────────────────────
-echo "==> [6/6] Installing GRUB bootloader..."
-if [[ "$BOOT_MODE" == "uefi" ]]; then
-    chroot "$TARGET" grub-install \
-        --target=x86_64-efi \
-        --efi-directory=/boot/efi \
-        --bootloader-id=DebDox \
-        --no-nvram \
-        --recheck
-    mkdir -p "${TARGET}/boot/efi/EFI/BOOT"
-    cp "${TARGET}/boot/efi/EFI/DebDox/grubx64.efi" \
-       "${TARGET}/boot/efi/EFI/BOOT/BOOTX64.EFI" 2>/dev/null || true
 else
-    grub-install \
-        --target=i386-pc \
-        --boot-directory="${TARGET}/boot" \
-        --recheck \
-        "$DISK"
+    echo "  (none)"
 fi
 
-KERNEL_VER=$(ls "${TARGET}/boot/vmlinuz-"* 2>/dev/null \
-    | sort -V | tail -1 | sed 's|.*/vmlinuz-||')
-[[ -n "$KERNEL_VER" ]] \
-    || { echo "ERROR: no kernel found in ${TARGET}/boot/"; exit 1; }
-echo "    kernel: ${KERNEL_VER}"
+# ── 6. Summary & confirm ──────────────────────────────────────────────────
+ZFS_SUMMARY="None"
+[[ ${#ZFS_SELECTED[@]} -gt 0 ]] && ZFS_SUMMARY="${ZFS_TOPO}: ${ZFS_SELECTED[*]}"
+hdr "!! CONFIRM — DISK WILL BE ERASED !!"
+echo "  Disk      : ${DISK} (${BOOT_LABEL})"
+echo "  Locale    : ${LOCALE}"
+echo "  Keyboard  : ${KEYMAP}"
+echo "  Time zone : ${TIMEZONE}"
+echo "  Hostname  : ${HOSTNAME}"
+echo "  Interface : ${NET_IFACE}"
+echo "  IP address: ${HOST_IP}/${PREFIX}"
+echo "  Gateway   : ${GATEWAY}"
+echo "  DNS       : ${DNS}"
+echo "  Admin user: ${ADMIN_USER}"
+echo "  ZFS pool  : ${ZFS_SUMMARY}"
+echo ""
+printf "  Type 'yes' to erase %s and install: " "$DISK"; read -r CONFIRM
+[[ "$CONFIRM" == "yes" ]] || { echo "  Installation aborted."; exit 1; }
 
-mkdir -p "${TARGET}/boot/grub"
-cat > "${TARGET}/boot/grub/grub.cfg" <<GRUBCFG
-set default=0
-set timeout=3
+# ── 7. Install ────────────────────────────────────────────────────────────
+dbx_run_install
 
-insmod part_gpt
-insmod part_msdos
-insmod ext2
-insmod gzio
-insmod search
-insmod search_fs_uuid
-
-menuentry "DebDox" {
-    search --no-floppy --fs-uuid --set=root ${ROOT_UUID}
-    linux  /boot/vmlinuz-${KERNEL_VER} root=UUID=${ROOT_UUID} ro quiet
-    initrd /boot/initrd.img-${KERNEL_VER}
-}
-GRUBCFG
-
-echo "    grub.cfg written (root UUID=${ROOT_UUID})"
-
-if [[ -f "${TARGET}/usr/sbin/update-grub.bak" ]]; then
-    mv "${TARGET}/usr/sbin/update-grub.bak" "${TARGET}/usr/sbin/update-grub"
-fi
-
-# ── Unmount ───────────────────────────────────────────────────────────────
-umount "${TARGET}/run"                          2>/dev/null || true
-umount "${TARGET}/sys/firmware/efi/efivars"     2>/dev/null || true
-umount "${TARGET}/sys"                          2>/dev/null || true
-umount "${TARGET}/proc"                         2>/dev/null || true
-umount "${TARGET}/dev"                          2>/dev/null || true
-[[ "$BOOT_MODE" == "uefi" ]] && umount "${TARGET}/boot/efi" 2>/dev/null || true
-umount "$TARGET"
-
-# ── Done ──────────────────────────────────────────────────────────────────
 clear
 echo ""
 echo "  ✓  DebDox installed successfully!"
+echo ""
+echo "  After reboot, open:  http://${HOST_IP}/"
 echo ""
 echo "  Remove the installation media, then press Enter to reboot."
 echo ""
