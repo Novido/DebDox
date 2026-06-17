@@ -1,67 +1,64 @@
 #!/usr/bin/env bash
-# DebDox Installer — dispatcher; routes to TUI or text-mode installer
+# DebDox Installer — Terminal (plain text) mode
+# Works on serial consoles, dumb terminals and minimal environments
 set -euo pipefail
 
 [[ $EUID -ne 0 ]] && { echo "Must run as root" >&2; exit 1; }
 
-if grep -qw 'debdox\.installer=text' /proc/cmdline 2>/dev/null; then
-    exec /usr/local/bin/debdox-install-text
-fi
-
-W() { whiptail "$@" 3>&1 1>&2 2>&3; }
 TARGET="/target"
-
-# Partition helper — handles sda1 vs nvme0n1p1 naming
 part() { [[ "$1" == *nvme* || "$1" == *mmcblk* ]] && echo "${1}p${2}" || echo "${1}${2}"; }
+
+hr()  { printf '%0.s─' {1..60}; printf '\n'; }
+hdr() { echo ""; hr; printf "  %s\n" "$1"; hr; }
 
 # ── Banner ────────────────────────────────────────────────────────────────
 clear
-printf '\n'
-printf '  \033[1;36m██████╗ ███████╗██████╗ ██████╗  ██████╗ ██╗  ██╗\033[0m\n'
-printf '  \033[1;36m██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔═══██╗╚██╗██╔╝\033[0m\n'
-printf '  \033[1;36m██║  ██║█████╗  ██████╔╝██║  ██║██║   ██║ ╚███╔╝ \033[0m\n'
-printf '  \033[1;36m██║  ██║██╔══╝  ██╔══██╗██║  ██║██║   ██║ ██╔██╗ \033[0m\n'
-printf '  \033[1;36m██████╔╝███████╗██████╔╝██████╔╝╚██████╔╝██╔╝ ██╗\033[0m\n'
-printf '  \033[1;36m╚═════╝ ╚══════╝╚═════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝\033[0m\n'
-printf '  \033[2mHypervisor Platform — Installer\033[0m\n\n'
-sleep 1
+cat <<'BANNER'
+
+  ██████╗ ███████╗██████╗ ██████╗  ██████╗ ██╗  ██╗
+  ██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔═══██╗╚██╗██╔╝
+  ██║  ██║█████╗  ██████╔╝██║  ██║██║   ██║ ╚███╔╝
+  ██║  ██║██╔══╝  ██╔══██╗██║  ██║██║   ██║ ██╔██╗
+  ██████╔╝███████╗██████╔╝██████╔╝╚██████╔╝██╔╝ ██╗
+  ╚═════╝ ╚══════╝╚═════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝
+  Hypervisor Platform — Installer (Terminal UI)
+
+BANNER
 
 # ── 1. Welcome ────────────────────────────────────────────────────────────
-W --title " DebDox Installer " --msgbox \
-"Welcome to the DebDox installer.\n\
-\n\
-This wizard will:\n\
-\n\
-  • Partition the selected disk\n\
-  • Install DebDox to disk\n\
-  • Install the GRUB bootloader\n\
-\n\
-On first boot after installation, a setup wizard\n\
-will configure the network, admin password and\n\
-optional ZFS storage pool.\n\
-\n\
-WARNING: The selected disk will be completely erased." \
-20 64
+hdr "Welcome"
+echo "  This wizard will:"
+echo "    • Partition the selected disk"
+echo "    • Install DebDox to disk"
+echo "    • Install the GRUB bootloader"
+echo ""
+echo "  On first boot a setup wizard will configure network,"
+echo "  admin password and optional ZFS storage pool."
+echo ""
+echo "  WARNING: The selected disk will be completely erased."
+echo ""
+printf "  Press Enter to continue, or Ctrl+C to abort: "
+read -r
 
 # ── 2. Disk selection ─────────────────────────────────────────────────────
-DISK_ARGS=()
-while IFS= read -r line; do
-    dev="${line%% *}"
-    rest="${line#* }"
-    size="${rest%% *}"
-    model="${rest#* }"
-    [[ "$dev" == loop* || "$dev" == sr* ]] && continue
-    DISK_ARGS+=("/dev/$dev" "${size}  ${model}")
-done < <(lsblk -dno NAME,SIZE,MODEL 2>/dev/null)
+hdr "Target Disk"
+echo "  Available disks:"
+echo ""
+lsblk -dno NAME,SIZE,MODEL 2>/dev/null | while read -r name size model; do
+    [[ "$name" == loop* || "$name" == sr* ]] && continue
+    printf "    /dev/%-14s  %-8s  %s\n" "$name" "$size" "$model"
+done
+echo ""
 
-if [[ ${#DISK_ARGS[@]} -eq 0 ]]; then
-    W --title " Error " --msgbox "No disks found." 8 40
-    exit 1
-fi
-
-DISK=$(W --title " Target Disk " \
-    --menu "Select the disk to install DebDox on:" \
-    16 70 8 "${DISK_ARGS[@]}")
+while true; do
+    printf "  Disk to install on (e.g. sda, nvme0n1): /dev/"
+    read -r DISK_NAME
+    DISK="/dev/${DISK_NAME}"
+    if [[ -b "$DISK" ]]; then
+        break
+    fi
+    echo "  ERROR: ${DISK} not found. Try again."
+done
 
 # ── 3. Detect boot mode ───────────────────────────────────────────────────
 if [[ -d /sys/firmware/efi ]]; then
@@ -72,23 +69,26 @@ else
     BOOT_LABEL="BIOS (Legacy)"
 fi
 
-# ── 4. Confirm ────────────────────────────────────────────────────────────
 DISK_SIZE=$(lsblk -dno SIZE "$DISK" 2>/dev/null || echo "?")
 DISK_MODEL=$(lsblk -dno MODEL "$DISK" 2>/dev/null || echo "")
 
-W --title " !! WARNING — DISK WILL BE ERASED !!" --yesno \
-"All data on the following disk will be permanently lost:\n\
-\n\
-  Disk  : ${DISK}\n\
-  Size  : ${DISK_SIZE}\n\
-  Model : ${DISK_MODEL}\n\
-  Boot  : ${BOOT_LABEL}\n\
-\n\
-Proceed with installation?" \
-14 64
+# ── 4. Confirm ────────────────────────────────────────────────────────────
+hdr "!! WARNING — DISK WILL BE ERASED !!"
+echo "  Disk  : ${DISK}"
+echo "  Size  : ${DISK_SIZE}"
+echo "  Model : ${DISK_MODEL}"
+echo "  Boot  : ${BOOT_LABEL}"
+echo ""
+printf "  Type 'yes' to confirm and start installation: "
+read -r CONFIRM
+if [[ "$CONFIRM" != "yes" ]]; then
+    echo ""
+    echo "  Installation aborted."
+    exit 1
+fi
 
 # ── 5. Partition ──────────────────────────────────────────────────────────
-clear
+echo ""
 echo "==> [1/6] Partitioning ${DISK}..."
 wipefs -a "$DISK" 2>/dev/null || true
 partprobe "$DISK" 2>/dev/null || true
@@ -141,10 +141,9 @@ rsync -aHAX \
     --exclude="/lost+found" \
     / "${TARGET}/"
 
-# ── 9. Configure the installed system ────────────────────────────────────
+# ── 9. Configure the installed system ─────────────────────────────────────
 echo "==> [5/6] Configuring installed system..."
 
-# fstab
 ROOT_UUID=$(blkid -s UUID -o value "$ROOT_PART")
 {
     echo "UUID=${ROOT_UUID}  /        ext4  errors=remount-ro  0  1"
@@ -155,7 +154,6 @@ ROOT_UUID=$(blkid -s UUID -o value "$ROOT_PART")
     echo "tmpfs            /tmp     tmpfs  defaults,nosuid,nodev  0  0"
 } > "${TARGET}/etc/fstab"
 
-# Hostname
 echo "debdox" > "${TARGET}/etc/hostname"
 cat > "${TARGET}/etc/hosts" <<'HOSTS'
 127.0.0.1   localhost
@@ -163,7 +161,6 @@ cat > "${TARGET}/etc/hosts" <<'HOSTS'
 ::1         localhost ip6-localhost ip6-loopback
 HOSTS
 
-# Bind-mount kernel filesystems for chroot operations
 mount --bind /dev  "${TARGET}/dev"
 mount -t proc  proc  "${TARGET}/proc"
 mount -t sysfs sysfs "${TARGET}/sys"
@@ -173,26 +170,19 @@ if [[ "$BOOT_MODE" == "uefi" ]]; then
         "${TARGET}/sys/firmware/efi/efivars" 2>/dev/null || true
 fi
 
-# Stub update-grub so kernel hooks don't fail during chroot operations.
-# grub-mkconfig cannot probe the disk correctly here; we write grub.cfg
-# manually after grub-install, which overwrites any auto-generated file.
 if [[ -f "${TARGET}/usr/sbin/update-grub" ]]; then
     cp "${TARGET}/usr/sbin/update-grub" "${TARGET}/usr/sbin/update-grub.bak"
     printf '#!/bin/sh\nexit 0\n' > "${TARGET}/usr/sbin/update-grub"
 fi
 
-# Remove live-boot packages so the installed system boots normally
 DEBIAN_FRONTEND=noninteractive chroot "$TARGET" apt-get purge -y --auto-remove \
     live-boot live-boot-initramfs-tools \
     live-config live-config-systemd \
     live-tools 2>/dev/null || true
 
-# Disable the installer service on the installed system — it must only run
-# from the live ISO (triggered by systemd.unit=installer.target on the kernel line)
 chroot "$TARGET" systemctl disable debdox-installer.service 2>/dev/null || true
 rm -f "${TARGET}/etc/systemd/system/installer.target.wants/debdox-installer.service"
 
-# Write a clean GRUB config before generating grub.cfg
 cat > "${TARGET}/etc/default/grub" <<GRUBDEFAULT
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=3
@@ -202,7 +192,6 @@ GRUB_CMDLINE_LINUX="root=UUID=${ROOT_UUID} ro quiet"
 GRUB_DISABLE_OS_PROBER=true
 GRUBDEFAULT
 
-# Regenerate initramfs without live hooks
 chroot "$TARGET" update-initramfs -u -k all
 
 # ── 10. Install GRUB ──────────────────────────────────────────────────────
@@ -214,13 +203,10 @@ if [[ "$BOOT_MODE" == "uefi" ]]; then
         --bootloader-id=DebDox \
         --no-nvram \
         --recheck
-    # Ensure fallback EFI path exists for firmware that ignores BootOrder
     mkdir -p "${TARGET}/boot/efi/EFI/BOOT"
     cp "${TARGET}/boot/efi/EFI/DebDox/grubx64.efi" \
        "${TARGET}/boot/efi/EFI/BOOT/BOOTX64.EFI" 2>/dev/null || true
 else
-    # Run from live system with explicit boot-directory so GRUB modules
-    # are copied from live's grub-pc-bin into the target's /boot/grub/
     grub-install \
         --target=i386-pc \
         --boot-directory="${TARGET}/boot" \
@@ -228,16 +214,12 @@ else
         "$DISK"
 fi
 
-# Find the installed kernel version
 KERNEL_VER=$(ls "${TARGET}/boot/vmlinuz-"* 2>/dev/null \
     | sort -V | tail -1 | sed 's|.*/vmlinuz-||')
-
 [[ -n "$KERNEL_VER" ]] \
     || { echo "ERROR: no kernel found in ${TARGET}/boot/"; exit 1; }
-
 echo "    kernel: ${KERNEL_VER}"
 
-# Write grub.cfg directly — avoids grub-mkconfig chroot environment issues
 mkdir -p "${TARGET}/boot/grub"
 cat > "${TARGET}/boot/grub/grub.cfg" <<GRUBCFG
 set default=0
@@ -259,7 +241,6 @@ GRUBCFG
 
 echo "    grub.cfg written (root UUID=${ROOT_UUID})"
 
-# Restore update-grub (needed for future kernel upgrades on installed system)
 if [[ -f "${TARGET}/usr/sbin/update-grub.bak" ]]; then
     mv "${TARGET}/usr/sbin/update-grub.bak" "${TARGET}/usr/sbin/update-grub"
 fi
@@ -275,8 +256,10 @@ umount "$TARGET"
 
 # ── Done ──────────────────────────────────────────────────────────────────
 clear
-printf '\n'
-printf '  \033[1;32m✓  DebDox installed successfully!\033[0m\n\n'
-printf '  Remove the installation media, then press Enter to reboot.\n\n'
+echo ""
+echo "  ✓  DebDox installed successfully!"
+echo ""
+echo "  Remove the installation media, then press Enter to reboot."
+echo ""
 read -r
 reboot
