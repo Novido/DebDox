@@ -1,13 +1,22 @@
 [Unit]
 Description=DebDox Installer
-After=basic.target systemd-udevd.service
+After=basic.target
+# Explicit ordering so we start after tty1 is ready
+After=systemd-udevd.service
 
 [Service]
-Type=simple
-ExecStart=/usr/local/bin/debdox-install
-ExecStopPost=/sbin/reboot -f
+# idle: wait until all other boot jobs finish before grabbing the TTY
+Type=idle
+# agetty initialises the terminal (line discipline, TERM, window size)
+# then calls debdox-install with -f root (autologin args, which we ignore)
+ExecStart=-/sbin/agetty --autologin root --login-program /usr/local/bin/debdox-install --noclear tty1 linux
+ExecStopPost=-/sbin/reboot -f
+Restart=no
+KillMode=process
+TimeoutStartSec=0
 StandardInput=tty
 StandardOutput=tty
+StandardError=tty
 TTYPath=/dev/tty1
 TTYReset=yes
 TTYVHangup=yes
