@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# DebDox welcome banner — shown after setup and on every console/SSH login
+
+HOST_IP="$(cat /etc/debdox/host_ip 2>/dev/null \
+    || hostname -I 2>/dev/null | awk '{print $1}' \
+    || echo "?.?.?.?")"
+
+svc() {
+    local state
+    state=$(systemctl is-active "$1" 2>/dev/null) || state="inactive"
+    if [[ "$state" == "active" ]]; then
+        printf '\033[32m%-8s\033[0m' "running"
+    else
+        printf '\033[31m%-8s\033[0m' "$state"
+    fi
+}
+
+printf '\n'
+printf '  \033[1;36m██████╗ ███████╗██████╗ ██████╗  ██████╗ ██╗  ██╗\033[0m\n'
+printf '  \033[1;36m██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔═══██╗╚██╗██╔╝\033[0m\n'
+printf '  \033[1;36m██║  ██║█████╗  ██████╔╝██║  ██║██║   ██║ ╚███╔╝ \033[0m\n'
+printf '  \033[1;36m██║  ██║██╔══╝  ██╔══██╗██║  ██║██║   ██║ ██╔██╗ \033[0m\n'
+printf '  \033[1;36m██████╔╝███████╗██████╔╝██████╔╝╚██████╔╝██╔╝ ██╗\033[0m\n'
+printf '  \033[1;36m╚═════╝ ╚══════╝╚═════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝\033[0m\n'
+printf '  \033[2mHypervisor Platform\033[0m\n'
+printf '\n'
+printf '  \033[2m────────────────────────────────────────────────────\033[0m\n'
+printf '  \033[1mWeb UI\033[0m  →  \033[1;34mhttp://%s\033[0m\n' "$HOST_IP"
+printf '  \033[1mAPI\033[0m     →  \033[1;34mhttp://%s/api\033[0m\n' "$HOST_IP"
+printf '  \033[2m────────────────────────────────────────────────────\033[0m\n'
+printf '  nginx          %s\n' "$(svc nginx)"
+printf '  debdox-api     %s\n' "$(svc debdox-api)"
+printf '  debdox-agent   %s\n' "$(svc debdox-agent)"
+printf '  debdox-mcp     %s\n' "$(svc debdox-mcp)"
+printf '  \033[2m────────────────────────────────────────────────────\033[0m\n'
+printf '\n'

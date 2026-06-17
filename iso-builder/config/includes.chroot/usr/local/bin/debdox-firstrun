@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+# DebDox first-run setup wizard — runs once on first boot after installation
+set -euo pipefail
+
+FLAG="/etc/debdox/.configured"
+[[ -f "$FLAG" ]] && exit 0
+
+CONF="/etc/debdox"
+mkdir -p "$CONF"
+
+# whiptail helper: redirect stderr→stdout so we can capture the selection
+W() { whiptail "$@" 3>&1 1>&2 2>&3; }
+
+clear
+printf '\n'
+printf '  \033[1;36m██████╗ ███████╗██████╗ ██████╗  ██████╗ ██╗  ██╗\033[0m\n'
+printf '  \033[1;36m██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔═══██╗╚██╗██╔╝\033[0m\n'
+printf '  \033[1;36m██║  ██║█████╗  ██████╔╝██║  ██║██║   ██║ ╚███╔╝ \033[0m\n'
+printf '  \033[1;36m██║  ██║██╔══╝  ██╔══██╗██║  ██║██║   ██║ ██╔██╗ \033[0m\n'
+printf '  \033[1;36m██████╔╝███████╗██████╔╝██████╔╝╚██████╔╝██╔╝ ██╗\033[0m\n'
+printf '  \033[1;36m╚═════╝ ╚══════╝╚═════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝\033[0m\n'
+printf '\n'
+sleep 1
+
+# ── 1. Welcome ────────────────────────────────────────────────────────────
+W --title " DebDox First-Run Setup " --msgbox \
+"Welcome to DebDox — Hypervisor Platform\n\
+\n\
+This wizard will configure:\n\
+\n\
+  • Network management interface and static IP\n\
+  • Admin password (console + web UI)\n\
+  • ZFS storage pool (optional)\n\
+\n\
+Setup takes about 2 minutes. Press OK to begin." 16 62
+
+# ── 2. Network interface ──────────────────────────────────────────────────
+IFACE_ARGS=()
+while IFS= read -r iface; do
+    mac=$(cat "/sys/class/net/$iface/address" 2>/dev/null || echo "??:??:??:??:??:??")
+    IFACE_ARGS+=("$iface" "[$mac]")
+done < <(ls /sys/class/net/ | grep -Ev '^(lo|docker|virbr|veth|vmbr|bond|dummy)')
+
+if [[ ${#IFACE_ARGS[@]} -eq 0 ]]; then
+    W --title " Error " --msgbox \
+        "No physical network interfaces found.\nCheck hardware and try again." 9 55
+    exit 1
+fi
+
+NET_IFACE=$(W --title " Network Interface " \
+    --menu "Select the management network interface:" 16 62 8 \
+    "${IFACE_ARGS[@]}")
+
+# ── 3. Static IP configuration ────────────────────────────────────────────
+# Try to pre-fill with any address currently obtained via DHCP
+DHCP_CIDR=$(ip -4 addr show "$NET_IFACE" 2>/dev/null \
+    | awk '/inet /{print $2}' | head -1 || true)
+DHCP_ADDR="${DHCP_CIDR%%/*}"
+DHCP_PREFIX="${DHCP_CIDR##*/}"
+DHCP_GW=$(ip route 2>/dev/null | awk '/^default/{print $3}' | head -1 || true)
+
+STATIC_CIDR=$(W --title " IP Address " \
+    --inputbox \
+    "Static IP address in CIDR notation:\n(e.g. 192.168.1.100/24)" \
+    11 62 "${DHCP_ADDR:-192.168.1.100}/${DHCP_PREFIX:-24}")
+
+GATEWAY=$(W --title " Default Gateway " \
+    --inputbox "Default gateway:" 9 62 "${DHCP_GW:-192.168.1.1}")
+
+HOST_IP="${STATIC_CIDR%%/*}"
+PREFIX="${STATIC_CIDR##*/}"
+
+# ── 4. Admin password ─────────────────────────────────────────────────────
+while true; do
+    PASS1=$(W --title " Admin Password " \
+        --passwordbox "Set the DebDox admin password:" 9 62)
+    PASS2=$(W --title " Admin Password " \
+        --passwordbox "Confirm admin password:" 9 62)
+    if [[ -n "$PASS1" && "$PASS1" == "$PASS2" ]]; then
+        break
+    fi
+    W --title " Error " --msgbox \
+        "Passwords do not match or are empty.\nPlease try again." 9 55
+done
+
+# ── 5. ZFS storage pool (optional) ───────────────────────────────────────
+ZFS_SELECTED=()
+ZFS_TOPO="stripe"
+
+mapfile -t RAW_DISKS < <(lsblk -dno NAME,SIZE,TYPE 2>/dev/null \
+    | awk '$3=="disk"{print $1" "$2}')
+
+if [[ ${#RAW_DISKS[@]} -gt 0 ]]; then
+    DISK_ARGS=()
+    for entry in "${RAW_DISKS[@]}"; do
+        dname="${entry%% *}"
+        dsize="${entry##* }"
+        DISK_ARGS+=("$dname" "$dsize" "OFF")
+    done
+
+    ZFS_RAW=$(W --title " ZFS Storage Pool " \
+        --checklist \
+        "Select disks for the VM/container storage pool.\n(Space to select, optional — skip with OK if unsure)" \
+        18 62 8 "${DISK_ARGS[@]}") || ZFS_RAW=""
+
+    if [[ -n "$ZFS_RAW" ]]; then
+        # Remove quotes that whiptail adds around each item
+        ZFS_CLEAN="${ZFS_RAW//\"/}"
+        read -ra ZFS_SELECTED <<< "$ZFS_CLEAN"
+
+        if [[ ${#ZFS_SELECTED[@]} -ge 2 ]]; then
+            ZFS_TOPO=$(W --title " ZFS Pool Topology " \
+                --menu "Select pool topology:" 13 62 3 \
+                "mirror" "Mirror (RAID-1, needs 2+ disks, redundant)" \
+                "raidz1" "RAIDZ1 (RAID-5, needs 3+ disks, parity)" \
+                "stripe" "Stripe (RAID-0, no redundancy, max capacity)")
+        fi
+    fi
+fi
+
+# ── 6. Confirm and apply ──────────────────────────────────────────────────
+ZFS_SUMMARY="None"
+if [[ ${#ZFS_SELECTED[@]} -gt 0 ]]; then
+    ZFS_SUMMARY="${ZFS_TOPO}: ${ZFS_SELECTED[*]}"
+fi
+
+W --title " Confirm Settings " --yesno \
+"Apply the following configuration?\n\
+\n\
+  Interface : ${NET_IFACE}\n\
+  IP address: ${HOST_IP}/${PREFIX}\n\
+  Gateway   : ${GATEWAY}\n\
+  ZFS pool  : ${ZFS_SUMMARY}\n" \
+14 62
+
+clear
+echo ""
+echo "Applying configuration, please wait..."
+echo ""
+
+# Network — fill in the template placed by 06-network.sh
+TMPL="/etc/network/interfaces.debdox-template"
+if [[ -f "$TMPL" ]]; then
+    sed \
+        -e "s|__IFACE__|${NET_IFACE}|g" \
+        -e "s|__HOST_IP__|${HOST_IP}|g" \
+        -e "s|__PREFIX__|${PREFIX}|g" \
+        -e "s|__GATEWAY__|${GATEWAY}|g" \
+        "$TMPL" > /etc/network/interfaces
+else
+    cat > /etc/network/interfaces <<EOF
+auto lo
+iface lo inet loopback
+
+auto ${NET_IFACE}
+iface ${NET_IFACE} inet manual
+
+auto vmbr0
+iface vmbr0 inet static
+    address ${HOST_IP}/${PREFIX}
+    gateway ${GATEWAY}
+    bridge-ports ${NET_IFACE}
+    bridge-stp off
+    bridge-fd 0
+    bridge-maxwait 0
+EOF
+fi
+
+# Root and admin system password
+echo "root:${PASS1}" | chpasswd
+
+# DebDox API config
+mkdir -p /opt/debdox/data
+cat > "${CONF}/api.env" <<EOF
+SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+DEBDOX_ADMIN_PASSWORD=${PASS1}
+DB_URL=sqlite:////opt/debdox/data/debdox.db
+EOF
+chmod 600 "${CONF}/api.env"
+
+# Persist host IP for the welcome banner
+echo "${HOST_IP}" > "${CONF}/host_ip"
+
+# ZFS pool
+if [[ ${#ZFS_SELECTED[@]} -gt 0 ]]; then
+    echo "Creating ZFS pool (${ZFS_TOPO})..."
+    DISK_DEVS=()
+    for d in "${ZFS_SELECTED[@]}"; do
+        DISK_DEVS+=("/dev/${d}")
+    done
+    if [[ "$ZFS_TOPO" == "stripe" ]]; then
+        zpool create -f debdox-data "${DISK_DEVS[@]}" 2>/dev/null || true
+    else
+        zpool create -f debdox-data "$ZFS_TOPO" "${DISK_DEVS[@]}" 2>/dev/null || true
+    fi
+    zfs create -p debdox-data/vms       2>/dev/null || true
+    zfs create -p debdox-data/containers 2>/dev/null || true
+    zfs create -p debdox-data/backups   2>/dev/null || true
+    echo "ZFS pool created."
+fi
+
+# Bring up the bridge
+echo "Bringing up network..."
+ifdown vmbr0 2>/dev/null || true
+ifup vmbr0   2>/dev/null || true
+
+# Start DebDox services
+echo "Starting services..."
+systemctl restart nginx debdox-api debdox-agent debdox-mcp 2>/dev/null || true
+
+# Mark as configured so this wizard never runs again
+touch "$FLAG"
+
+echo ""
+echo "Configuration complete."
+sleep 1
+
+exec /usr/local/bin/debdox-welcome

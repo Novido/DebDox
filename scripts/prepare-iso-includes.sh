@@ -24,6 +24,9 @@ fi
 # Create directories
 mkdir -p "${INCLUDES}"/{api,agent,mcp,monitoring,ui/out}
 mkdir -p "${SYS_UNITS}"
+mkdir -p "${ROOT}/iso-builder/config/includes.chroot/usr/local/bin"
+mkdir -p "${ROOT}/iso-builder/config/includes.chroot/etc/profile.d"
+mkdir -p "${ROOT}/iso-builder/config/includes.chroot/etc/systemd/system/getty@tty1.service.d"
 
 echo "==> Copying API..."
 rsync -a --delete \
