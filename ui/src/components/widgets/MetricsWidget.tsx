@@ -49,7 +49,7 @@ export function MetricsWidget() {
             <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }} />
             <Tooltip
               contentStyle={{ background: "#1a2332", border: "none", borderRadius: 6, fontSize: 12 }}
-              formatter={(val: number) => `${val}%`}
+              formatter={(val) => `${val}%`}
             />
             <Area type="monotone" dataKey="cpu" stroke="#29a6ba" fill="url(#cpu)" strokeWidth={1.5} dot={false} name="CPU" />
             <Area type="monotone" dataKey="memory" stroke="#9c89e8" fill="url(#mem)" strokeWidth={1.5} dot={false} name="Memory" />
