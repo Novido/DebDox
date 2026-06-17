@@ -21,7 +21,7 @@ import {
   MessageBarBody,
 } from "@fluentui/react-components";
 import {
-  GpuRegular,
+  FlashRegular,
   LinkRegular,
   LinkDismissRegular,
   InfoRegular,
@@ -135,7 +135,7 @@ function GpuCard({
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <GpuRegular style={{ fontSize: 22, color: vendorColor(gpu.vendor) }} />
+          <FlashRegular style={{ fontSize: 22, color: vendorColor(gpu.vendor) }} />
           <div>
             <Text size={400} weight="semibold">{gpu.name}</Text>
             <div style={{ display: "flex", gap: 6, marginTop: 4 }}>

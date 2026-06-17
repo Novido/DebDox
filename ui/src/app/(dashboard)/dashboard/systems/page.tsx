@@ -1,7 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { Text, Card, ProgressBar, Spinner, Badge } from "@fluentui/react-components";
-import { ServerRegular, ChipRegular, StorageRegular } from "@fluentui/react-icons";
+import { ServerRegular, RamRegular, StorageRegular } from "@fluentui/react-icons";
 import { systemApi, type SystemInfo } from "@/lib/api/system";
 
 function formatUptime(seconds: number): string {
@@ -88,7 +88,7 @@ export default function SystemPage() {
         </SectionCard>
 
         {/* CPU */}
-        <SectionCard icon={ChipRegular} title="CPU">
+        <SectionCard icon={RamRegular} title="CPU">
           <StatRow label="Model" value={data.cpu.model} />
           <StatRow label="Cores" value={data.cpu.cores} />
           <StatRow label="Threads" value={data.cpu.threads} />

@@ -58,6 +58,7 @@ borgbackup
 jq
 vim
 less
+pciutils
 
 # TUI installer support
 dialog

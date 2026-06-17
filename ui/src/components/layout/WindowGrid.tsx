@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import GridLayout, { Layout } from "react-grid-layout";
+import GridLayout, { type Layout, type LayoutItem } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import { usersApi } from "@/lib/api/users";
@@ -9,11 +9,11 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 interface Props {
   children: React.ReactNode[];
   widgetIds: string[];
-  defaultLayout: Layout[];
+  defaultLayout: LayoutItem[];
 }
 
 export function WindowGrid({ children, widgetIds, defaultLayout }: Props) {
-  const [layout, setLayout] = useState<Layout[]>(defaultLayout);
+  const [layout, setLayout] = useState<LayoutItem[]>(defaultLayout);
   const [width, setWidth] = useState(1200);
 
   const { data: savedLayout } = useQuery({
@@ -43,9 +43,10 @@ export function WindowGrid({ children, widgetIds, defaultLayout }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  const onLayoutChange = useCallback((newLayout: Layout[]) => {
-    setLayout(newLayout);
-    saveMutation.mutate(newLayout);
+  const onLayoutChange = useCallback((newLayout: Layout) => {
+    const items = [...newLayout] as LayoutItem[];
+    setLayout(items);
+    saveMutation.mutate(items);
   }, [saveMutation]);
 
   return (

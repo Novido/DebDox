@@ -1,7 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { Text, Card, ProgressBar, Badge, Spinner, tokens } from "@fluentui/react-components";
-import { GpuRegular } from "@fluentui/react-icons";
+import { FlashRegular } from "@fluentui/react-icons";
 import { apiClient } from "@/lib/api/client";
 
 export default function GPUPage() {
