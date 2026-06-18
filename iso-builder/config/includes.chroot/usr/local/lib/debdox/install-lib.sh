@@ -199,7 +199,13 @@ EOF
 # ── Admin account + DebDox config ─────────────────────────────────────────
 dbx_apply_admin() {
     echo "    admin user : ${ADMIN_USER}"
-    echo "root:${ADMIN_PASS}" | chroot "$TARGET" chpasswd
+    # Root console password: a dedicated hashed/plaintext root password if
+    # the caller supplied one (automated install), otherwise the admin pw.
+    if [[ -n "${ROOT_PASS_HASHED:-}" ]]; then
+        echo "root:${ROOT_PASS_HASHED}" | chroot "$TARGET" chpasswd -e
+    else
+        echo "root:${ROOT_PASS:-$ADMIN_PASS}" | chroot "$TARGET" chpasswd
+    fi
 
     mkdir -p "${TARGET}/etc/debdox"
     cat > "${TARGET}/etc/debdox/api.env" <<EOF

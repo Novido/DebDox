@@ -1,0 +1,45 @@
+# DebDox automated-installation answer file (Proxmox auto-installer style).
+#
+# Use it with the "Install DebDox (Automated / answer.toml)" boot entry, or
+# by adding `debdox.installer=auto` to the kernel command line.
+#
+# The installer looks for this file, in order:
+#   1. kernel arg   debdox.answer=/path/answer.toml
+#   2. kernel arg   debdox.answer_url=https://host/answer.toml
+#   3. a partition labelled  DEBDOX-AIS  containing  answer.toml
+#        (e.g.  mkfs.vfat -n DEBDOX-AIS /dev/sdX1  then copy answer.toml)
+#   4. answer.toml on the installation media root
+#
+# WARNING: the selected OS disk is erased without further confirmation.
+
+[global]
+locale         = "en_US.UTF-8"
+keyboard       = "se"
+timezone       = "Europe/Stockholm"
+fqdn           = "debdox.example.com"
+admin-username = "admin"
+admin-password = "ChangeMe123!"          # web UI + (default) root console password
+# root-password        = "..."           # optional: separate root console password
+# root-password-hashed = "$6$..."        # optional: pre-hashed root password (crypt)
+
+[network]
+source    = "from-answer"                # "from-answer" (static) or "from-dhcp"
+interface = "eth0"                       # optional; first physical NIC if omitted
+cidr      = "192.168.1.100/24"           # required when source = from-answer
+gateway   = "192.168.1.1"                # required when source = from-answer
+dns       = "1.1.1.1 8.8.8.8"
+
+[disk-setup]
+disk = "sda"                             # OS install disk (will be erased)
+
+# Optional dedicated ZFS data pool for VMs/containers (separate disks):
+# [zfs-pool]
+# disks    = ["sdb", "sdc"]
+# topology = "mirror"                     # mirror | raidz1 | stripe
+
+# Optional first-boot hook executed once on the installed system:
+# [first-boot]
+# source   = "from-iso"                  # "from-iso" (path) or "from-url"
+# path     = "/run/live/medium/setup.sh" # when source = from-iso
+# url      = "https://host/setup.sh"     # when source = from-url
+# ordering = "network-online"            # before-network | network-online | fully-up

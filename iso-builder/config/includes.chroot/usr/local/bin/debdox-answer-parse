@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""Parse a DebDox answer.toml and emit shell-safe KEY=value assignments.
+
+Usage:  debdox-answer-parse /path/to/answer.toml
+The output is meant to be `eval`-ed by debdox-install-auto. Every value is
+quoted with shlex.quote so passwords and arbitrary strings are safe.
+"""
+import sys
+import shlex
+
+try:
+    import tomllib  # Python 3.11+
+except ModuleNotFoundError:  # pragma: no cover
+    sys.stderr.write("ERROR: tomllib not available (need Python 3.11+)\n")
+    sys.exit(2)
+
+
+def emit(key, value):
+    if value is None:
+        return
+    if isinstance(value, (list, tuple)):
+        value = " ".join(str(v) for v in value)
+    print(f"{key}={shlex.quote(str(value))}")
+
+
+def main():
+    if len(sys.argv) != 2:
+        sys.stderr.write("usage: debdox-answer-parse <answer.toml>\n")
+        sys.exit(2)
+    with open(sys.argv[1], "rb") as fh:
+        data = tomllib.load(fh)
+
+    g = data.get("global", {})
+    emit("LOCALE", g.get("locale", "en_US.UTF-8"))
+    emit("KEYMAP", g.get("keyboard", "us"))
+    emit("TIMEZONE", g.get("timezone", "UTC"))
+    emit("HOSTNAME", g.get("fqdn", "debdox.local"))
+    emit("ADMIN_USER", g.get("admin-username", "admin"))
+    emit("ADMIN_PASS", g.get("admin-password"))
+    emit("ROOT_PASS", g.get("root-password"))
+    emit("ROOT_PASS_HASHED", g.get("root-password-hashed"))
+
+    n = data.get("network", {})
+    emit("NET_SOURCE", n.get("source", "from-dhcp"))
+    emit("NET_IFACE", n.get("interface"))
+    emit("NET_CIDR", n.get("cidr"))
+    emit("GATEWAY", n.get("gateway"))
+    dns = n.get("dns")
+    emit("DNS", dns if dns is not None else "1.1.1.1 8.8.8.8")
+
+    d = data.get("disk-setup", {})
+    emit("DISK_NAME", d.get("disk"))
+
+    z = data.get("zfs-pool", {})
+    emit("ZFS_DISKS", z.get("disks", []))
+    emit("ZFS_TOPO", z.get("topology", "stripe"))
+
+    fb = data.get("first-boot", {})
+    if fb:
+        emit("FIRSTBOOT_SOURCE", fb.get("source", "from-iso"))
+        emit("FIRSTBOOT_PATH", fb.get("path"))
+        emit("FIRSTBOOT_URL", fb.get("url"))
+        emit("FIRSTBOOT_ORDER", fb.get("ordering", "network-online"))
+
+
+if __name__ == "__main__":
+    main()

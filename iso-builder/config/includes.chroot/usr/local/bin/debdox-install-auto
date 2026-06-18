@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+# DebDox Installer — Automated / unattended (Proxmox auto-installer style).
+# Locates an answer.toml, applies it via the shared install library, and
+# reboots into a configured system with no interaction.
+set -euo pipefail
+
+[[ $EUID -ne 0 ]] && { echo "Must run as root" >&2; exit 1; }
+
+source /usr/local/lib/debdox/install-lib.sh
+
+LOG=/var/log/debdox-install.log
+: > "$LOG"
+log() { echo "[auto] $*" | tee -a "$LOG"; }
+
+cmdline_val() { sed -n "s/.*\b$1=\([^ ]*\).*/\1/p" /proc/cmdline; }
+
+# ── Locate the answer file ────────────────────────────────────────────────
+# Priority: explicit path → URL → labelled partition → live media → ISO root
+find_answer() {
+    local p url dev mnt
+    p="$(cmdline_val 'debdox.answer')"
+    [[ -n "$p" && -f "$p" ]] && { echo "$p"; return; }
+
+    url="$(cmdline_val 'debdox.answer_url')"
+    if [[ -n "$url" ]]; then
+        if curl -fsSL "$url" -o /run/answer.toml 2>/dev/null \
+           || wget -qO /run/answer.toml "$url" 2>/dev/null; then
+            echo /run/answer.toml; return
+        fi
+    fi
+
+    dev="$(blkid -L DEBDOX-AIS 2>/dev/null || true)"
+    if [[ -n "$dev" ]]; then
+        mnt=/run/debdox-ais; mkdir -p "$mnt"
+        if mount -o ro "$dev" "$mnt" 2>/dev/null && [[ -f "$mnt/answer.toml" ]]; then
+            echo "$mnt/answer.toml"; return
+        fi
+    fi
+
+    for c in /run/live/medium/answer.toml /lib/live/mount/medium/answer.toml /answer.toml; do
+        [[ -f "$c" ]] && { echo "$c"; return; }
+    done
+}
+
+# ── First-boot hook (optional) ────────────────────────────────────────────
+install_firstboot_hook() {
+    local script="" after="network-online.target" wants="network-online.target"
+    case "${FIRSTBOOT_SOURCE:-}" in
+        from-iso)
+            [[ -n "${FIRSTBOOT_PATH:-}" && -f "${FIRSTBOOT_PATH}" ]] && script="${FIRSTBOOT_PATH}" ;;
+        from-url)
+            if [[ -n "${FIRSTBOOT_URL:-}" ]]; then
+                curl -fsSL "${FIRSTBOOT_URL}" -o /run/firstboot.sh 2>/dev/null \
+                    || wget -qO /run/firstboot.sh "${FIRSTBOOT_URL}" 2>/dev/null || true
+                [[ -s /run/firstboot.sh ]] && script=/run/firstboot.sh
+            fi ;;
+        *) return 0 ;;
+    esac
+    [[ -n "$script" ]] || { log "first-boot: no script found, skipping"; return 0; }
+
+    case "${FIRSTBOOT_ORDER:-network-online}" in
+        before-network) after="network-pre.target"; wants="" ;;
+        fully-up)       after="multi-user.target";  wants="" ;;
+    esac
+
+    install -m 0755 "$script" "${TARGET}/usr/local/bin/debdox-firstboot-hook"
+    cat > "${TARGET}/etc/systemd/system/debdox-firstboot.service" <<EOF
+[Unit]
+Description=DebDox first-boot hook
+After=${after}
+${wants:+Wants=${wants}}
+ConditionPathExists=/usr/local/bin/debdox-firstboot-hook
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/debdox-firstboot-hook
+ExecStartPost=/bin/rm -f /usr/local/bin/debdox-firstboot-hook
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    chroot "$TARGET" systemctl enable debdox-firstboot.service 2>/dev/null || true
+    log "first-boot: hook installed (ordering=${FIRSTBOOT_ORDER:-network-online})"
+}
+
+# ── Banner ────────────────────────────────────────────────────────────────
+clear
+echo ""
+echo "  DebDox — Automated Installation"
+echo "  ──────────────────────────────────────────────"
+
+ANSWER="$(find_answer || true)"
+if [[ -z "${ANSWER:-}" || ! -f "$ANSWER" ]]; then
+    echo ""
+    echo "  ERROR: no answer file found."
+    echo "  Provide one of:"
+    echo "    • kernel arg debdox.answer=/path/answer.toml"
+    echo "    • kernel arg debdox.answer_url=https://.../answer.toml"
+    echo "    • a partition labelled DEBDOX-AIS containing answer.toml"
+    echo "    • answer.toml on the installation media root"
+    echo ""
+    echo "  Dropping to a shell. 'reboot' to restart."
+    exec bash -i
+fi
+log "using answer file: ${ANSWER}"
+
+# ── Parse ─────────────────────────────────────────────────────────────────
+eval "$(debdox-answer-parse "$ANSWER")"
+
+# ── Map answer values to install-lib variables ────────────────────────────
+: "${ADMIN_USER:?answer.toml: global.admin-username required}"
+: "${ADMIN_PASS:?answer.toml: global.admin-password required}"
+: "${DISK_NAME:?answer.toml: disk-setup.disk required}"
+DISK="/dev/${DISK_NAME}"
+[[ -b "$DISK" ]] || { log "ERROR: target disk ${DISK} not found"; exec bash -i; }
+
+if [[ -d /sys/firmware/efi ]]; then BOOT_MODE="uefi"; else BOOT_MODE="bios"; fi
+
+# Network: static from the answer, or capture the current DHCP lease
+if [[ "${NET_SOURCE:-from-dhcp}" == "from-answer" ]]; then
+    : "${NET_CIDR:?answer.toml: network.cidr required for from-answer}"
+    : "${GATEWAY:?answer.toml: network.gateway required for from-answer}"
+    HOST_IP="${NET_CIDR%%/*}"; PREFIX="${NET_CIDR##*/}"
+    [[ -n "${NET_IFACE:-}" ]] || NET_IFACE="$(ls /sys/class/net/ | grep -Ev '^(lo|docker|virbr|veth|vmbr|bond|dummy)' | head -1)"
+else
+    NET_IFACE="${NET_IFACE:-$(ls /sys/class/net/ | grep -Ev '^(lo|docker|virbr|veth|vmbr|bond|dummy)' | head -1)}"
+    CUR="$(ip -4 addr show "$NET_IFACE" 2>/dev/null | awk '/inet /{print $2}' | head -1)"
+    HOST_IP="${CUR%%/*}"; PREFIX="${CUR##*/}"
+    GATEWAY="$(ip route 2>/dev/null | awk '/^default/{print $3}' | head -1)"
+    : "${HOST_IP:?DHCP lease not available; specify network.source=from-answer}"
+fi
+: "${DNS:=1.1.1.1 8.8.8.8}"
+
+# ZFS pool (optional)
+ZFS_SELECTED=(); read -ra ZFS_SELECTED <<< "${ZFS_DISKS:-}"
+ZFS_TOPO="${ZFS_TOPO:-stripe}"
+
+loadkeys "${KEYMAP}" 2>/dev/null || true
+
+log "disk=${DISK} (${BOOT_MODE})  host=${HOSTNAME}  ip=${HOST_IP}/${PREFIX}  admin=${ADMIN_USER}"
+log "starting unattended installation in 5s (Ctrl+C to abort)..."
+sleep 5
+
+# ── Install ───────────────────────────────────────────────────────────────
+dbx_run_install
+
+# ── First-boot hook ───────────────────────────────────────────────────────
+# Re-mount target briefly if the hook needs to be installed
+if [[ -n "${FIRSTBOOT_SOURCE:-}" ]]; then
+    ROOT_PART=$(part "$DISK" 2)
+    mount "$ROOT_PART" "$TARGET" 2>/dev/null || true
+    mount --bind /dev "${TARGET}/dev" 2>/dev/null || true
+    mount -t proc proc "${TARGET}/proc" 2>/dev/null || true
+    mount -t sysfs sysfs "${TARGET}/sys" 2>/dev/null || true
+    install_firstboot_hook
+    umount "${TARGET}/sys" "${TARGET}/proc" "${TARGET}/dev" 2>/dev/null || true
+    umount "$TARGET" 2>/dev/null || true
+fi
+
+log "installation complete — rebooting"
+sleep 2
+reboot
