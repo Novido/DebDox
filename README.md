@@ -48,7 +48,7 @@ DebDox is a self-hosted bare-metal hypervisor management platform. Install it fr
 └──────────────────────────────────────────────────────────────┘
 ```
 
-All management services (`debdox-api`, `debdox-ui`, `debdox-agent`, `debdox-mcp`) run as **systemd units on the host** — not as containers. The monitoring stack (Prometheus, Grafana, etc.) runs as Docker containers managed by the host.
+All management services (`debdox-api`, `debdox-agent`, `debdox-mcp`) run as **systemd units on the host** — not as containers. The web UI is served by `nginx` (static files + API reverse proxy). The monitoring stack (Prometheus, Grafana, etc.) runs as Docker containers managed by the host.
 
 ---
 

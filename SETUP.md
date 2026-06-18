@@ -207,8 +207,8 @@ systemctl restart debdox-api
 ## Service management
 
 ```bash
-# Check status of all DebDox services
-systemctl status debdox-api debdox-ui debdox-agent debdox-mcp debdox-monitoring
+# Check status of all DebDox services (the web UI is served by stock nginx)
+systemctl status debdox-api debdox-agent debdox-mcp debdox-monitoring nginx
 
 # View logs
 journalctl -u debdox-api -f
@@ -240,7 +240,7 @@ Rebuild the ISO only when you want to produce a fresh installable image with the
 |---|---|
 | `lb build` fails with "debootstrap error" | Check internet connection; ensure you're on Debian Trixie |
 | Hook fails | Check `iso-builder/build.log`; re-run with `sudo lb build 2>&1 | tee build.log` |
-| UI not loading after install | `systemctl status debdox-ui nginx` — check nginx config |
+| UI not loading after install | `systemctl status nginx` — check nginx config and that `debdox-api` is running |
 | `debdox-api` fails to start | `journalctl -u debdox-api` — check Python venv and libvirt socket |
 | ZFS pool not found | Ensure ZFS kernel module loaded: `modprobe zfs && zpool import` |
 | Docker not working | `systemctl restart docker` then `systemctl restart debdox-api` |
