@@ -175,12 +175,19 @@ printf "  Type 'yes' to erase %s and install: " "$DISK"; read -r CONFIRM
 # ── 7. Install ────────────────────────────────────────────────────────────
 dbx_run_install
 
-clear
 echo ""
 echo "  ✓  DebDox installed successfully!"
 echo ""
 echo "  After reboot, open:  http://${HOST_IP}/"
 echo ""
+
+# In debug mode, return to the debug wrapper instead of rebooting so the
+# post-install shell can inspect /target and the install log.
+if [[ "${DEBDOX_DEBUG:-0}" == "1" ]]; then
+    echo "  (debug mode: returning to debug shell, no reboot)"
+    exit 0
+fi
+
 echo "  Remove the installation media, then press Enter to reboot."
 echo ""
 read -r

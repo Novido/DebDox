@@ -6,7 +6,10 @@ set -euo pipefail
 
 [[ $EUID -ne 0 ]] && { echo "Must run as root" >&2; exit 1; }
 
-# Delegate to the text-mode installer when requested on the kernel cmdline
+# Delegate based on the kernel cmdline
+if grep -qw 'debdox\.installer=debug' /proc/cmdline 2>/dev/null; then
+    exec /usr/local/bin/debdox-install-debug
+fi
 if grep -qw 'debdox\.installer=text' /proc/cmdline 2>/dev/null; then
     exec /usr/local/bin/debdox-install-text
 fi

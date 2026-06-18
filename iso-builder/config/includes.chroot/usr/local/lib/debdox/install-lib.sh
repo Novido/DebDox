@@ -364,7 +364,14 @@ dbx_finish() {
 
 # ── Run the full install given the collected variables ────────────────────
 dbx_run_install() {
-    clear
+    if [[ "${DEBDOX_DEBUG:-0}" == "1" ]]; then
+        echo "[debug] command tracing on; logging to /var/log/debdox-install.log"
+        exec > >(tee -a /var/log/debdox-install.log) 2>&1
+        set -x
+    else
+        clear
+    fi
+
     dbx_partition
     dbx_format
     dbx_mount
@@ -383,5 +390,14 @@ dbx_run_install() {
     dbx_issue
     dbx_disable_autologin
     dbx_chroot_umounts
-    dbx_finish
+
+    # Save the install log onto the target for post-mortem inspection
+    [[ -f /var/log/debdox-install.log ]] \
+        && cp /var/log/debdox-install.log "${TARGET}/var/log/" 2>/dev/null || true
+
+    # In debug mode leave the target mounted so the post-install shell can
+    # inspect it; the debug wrapper unmounts (or reboot does) afterwards.
+    if [[ "${DEBDOX_DEBUG:-0}" != "1" ]]; then
+        dbx_finish
+    fi
 }

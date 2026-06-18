@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# DebDox Installer — Debug Mode (Proxmox-style).
+# Drops to a shell before and after the installer, runs the terminal
+# installer with command tracing and full logging, and never reboots
+# automatically so you can inspect the result.
+
+[[ $EUID -ne 0 ]] && { echo "Must run as root" >&2; exit 1; }
+
+export DEBDOX_DEBUG=1
+LOG=/var/log/debdox-install.log
+: > "$LOG"
+
+debug_shell() {
+    local where="$1"
+    echo ""
+    echo "──────────────────────────────────────────────────────────────"
+    echo "  DEBUG SHELL — ${where}"
+    echo "──────────────────────────────────────────────────────────────"
+    echo "  You are in a root shell. Useful commands:"
+    echo "    lsblk -f                 list disks / filesystems"
+    echo "    ip a ; ip route          network state"
+    echo "    journalctl -b            this boot's logs"
+    echo "    cat ${LOG}               install trace log"
+    if mountpoint -q /target 2>/dev/null; then
+        echo "    --- target is mounted at /target ---"
+        echo "    cat /target/etc/debdox/api.env       installed admin config"
+        echo "    ls -la /target/var/lib/debdox        database directory"
+        echo "    cat /target/etc/network/interfaces   network config"
+        echo "    for d in dev proc sys; do mount --bind /\$d /target/\$d; done"
+        echo "    chroot /target                       enter installed system"
+    fi
+    echo ""
+    echo "  Type 'exit' or press Ctrl-D to continue."
+    echo "──────────────────────────────────────────────────────────────"
+    bash -i || true
+}
+
+clear
+cat <<'BANNER'
+
+  ██████╗ ███████╗██████╗ ██████╗  ██████╗ ██╗  ██╗
+  ██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔═══██╗╚██╗██╔╝
+  ██║  ██║█████╗  ██████╔╝██║  ██║██║   ██║ ╚███╔╝
+  ██║  ██║██╔══╝  ██╔══██╗██║  ██║██║   ██║ ██╔██╗
+  ██████╔╝███████╗██████╔╝██████╔╝╚██████╔╝██╔╝ ██╗
+  ╚═════╝ ╚══════╝╚═════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝
+  Hypervisor Platform — Installer (DEBUG MODE)
+
+BANNER
+
+# ── System diagnostics ────────────────────────────────────────────────────
+echo "── Disks ──────────────────────────────────────────────────────"
+lsblk -o NAME,SIZE,TYPE,MODEL 2>/dev/null || true
+echo ""
+echo "── Network ────────────────────────────────────────────────────"
+ip -brief addr 2>/dev/null || ip a 2>/dev/null || true
+echo ""
+echo "── Boot mode ──────────────────────────────────────────────────"
+[[ -d /sys/firmware/efi ]] && echo "  UEFI" || echo "  BIOS (Legacy)"
+echo ""
+echo "── Recent kernel messages (errors) ────────────────────────────"
+dmesg 2>/dev/null | grep -iE 'error|fail|i/o' | tail -n 10 || true
+
+# ── Pre-install shell ─────────────────────────────────────────────────────
+debug_shell "BEFORE install"
+
+# ── Run the terminal installer (traced, logged, no reboot) ────────────────
+echo ""
+echo ">>> Launching installer (tracing to ${LOG})..."
+set +e
+/usr/local/bin/debdox-install-text
+RC=$?
+set -e 2>/dev/null || true
+echo ""
+echo ">>> Installer exited with code: ${RC}"
+[[ $RC -ne 0 ]] && echo ">>> Installation FAILED — inspect ${LOG} and /target below."
+
+# ── Post-install shell ────────────────────────────────────────────────────
+debug_shell "AFTER install (exit code ${RC})"
+
+# ── Clean up and reboot on request ────────────────────────────────────────
+umount /target/dev /target/proc /target/sys 2>/dev/null || true
+umount -R /target 2>/dev/null || true
+
+echo ""
+printf "  Press Enter to reboot, or Ctrl+C to stay in the live environment: "
+read -r
+reboot
