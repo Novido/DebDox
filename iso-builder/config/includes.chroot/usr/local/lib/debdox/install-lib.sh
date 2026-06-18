@@ -50,7 +50,7 @@ dbx_partition() {
 # ── Format ────────────────────────────────────────────────────────────────
 dbx_format() {
     echo "==> [2/7] Formatting partitions..."
-    mkfs.fat -F32 -n EFI "$EFI_PART" -q
+    mkfs.fat -F32 -n EFI "$EFI_PART"
     mkfs.ext4 -L debdox-root -q -F "$ROOT_PART"
 }
 
