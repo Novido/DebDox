@@ -7,7 +7,8 @@
 #
 # Required variables set by the caller:
 #   DISK         e.g. /dev/sda                 ROOT_PART/EFI_PART are derived
-#   BOOT_MODE    "uefi" | "bios"
+#   BOOT_MODE    "uefi" | "bios" (informational only; the disk is always
+#                laid out hybrid-bootable so it boots under either firmware)
 #   LOCALE       e.g. en_US.UTF-8
 #   KEYMAP       e.g. se
 #   TIMEZONE     e.g. Europe/Stockholm
@@ -24,26 +25,24 @@ part() { [[ "$1" == *nvme* || "$1" == *mmcblk* ]] && echo "${1}p${2}" || echo "$
 
 # ── Partition ─────────────────────────────────────────────────────────────
 dbx_partition() {
-    echo "==> [1/7] Partitioning ${DISK}..."
+    echo "==> [1/7] Partitioning ${DISK} (hybrid BIOS+UEFI)..."
     wipefs -a "$DISK" 2>/dev/null || true
     partprobe "$DISK" 2>/dev/null || true
 
-    if [[ "$BOOT_MODE" == "uefi" ]]; then
-        parted -s "$DISK" \
-            mklabel gpt \
-            mkpart ESP fat32 1MiB 513MiB \
-            set 1 esp on \
-            mkpart primary ext4 513MiB 100%
-        EFI_PART=$(part "$DISK" 1)
-        ROOT_PART=$(part "$DISK" 2)
-    else
-        parted -s "$DISK" \
-            mklabel gpt \
-            mkpart primary 1MiB 2MiB \
-            set 1 bios_grub on \
-            mkpart primary ext4 2MiB 100%
-        ROOT_PART=$(part "$DISK" 2)
-    fi
+    # Always lay out a hybrid-bootable disk so it boots regardless of whether
+    # the firmware uses BIOS/Legacy or UEFI:
+    #   p1  1 MiB    BIOS boot partition (GRUB core.img for i386-pc)
+    #   p2  512 MiB  EFI System Partition (FAT32, GRUB for x86_64-efi)
+    #   p3  rest     ext4 root
+    parted -s "$DISK" \
+        mklabel gpt \
+        mkpart bios_grub 1MiB 2MiB \
+        set 1 bios_grub on \
+        mkpart ESP fat32 2MiB 514MiB \
+        set 2 esp on \
+        mkpart root ext4 514MiB 100%
+    EFI_PART=$(part "$DISK" 2)
+    ROOT_PART=$(part "$DISK" 3)
     partprobe "$DISK"
     sleep 1
 }
@@ -51,7 +50,7 @@ dbx_partition() {
 # ── Format ────────────────────────────────────────────────────────────────
 dbx_format() {
     echo "==> [2/7] Formatting partitions..."
-    [[ "$BOOT_MODE" == "uefi" ]] && mkfs.fat -F32 -n EFI "$EFI_PART" -q
+    mkfs.fat -F32 -n EFI "$EFI_PART" -q
     mkfs.ext4 -L debdox-root -q -F "$ROOT_PART"
 }
 
@@ -60,10 +59,8 @@ dbx_mount() {
     echo "==> [3/7] Mounting target..."
     mkdir -p "$TARGET"
     mount "$ROOT_PART" "$TARGET"
-    if [[ "$BOOT_MODE" == "uefi" ]]; then
-        mkdir -p "${TARGET}/boot/efi"
-        mount "$EFI_PART" "${TARGET}/boot/efi"
-    fi
+    mkdir -p "${TARGET}/boot/efi"
+    mount "$EFI_PART" "${TARGET}/boot/efi"
 }
 
 # ── Copy live system to disk ──────────────────────────────────────────────
@@ -85,12 +82,10 @@ dbx_copy() {
 # ── fstab ─────────────────────────────────────────────────────────────────
 dbx_fstab() {
     ROOT_UUID=$(blkid -s UUID -o value "$ROOT_PART")
+    EFI_UUID=$(blkid -s UUID -o value "$EFI_PART")
     {
         echo "UUID=${ROOT_UUID}  /        ext4  errors=remount-ro  0  1"
-        if [[ "$BOOT_MODE" == "uefi" ]]; then
-            EFI_UUID=$(blkid -s UUID -o value "$EFI_PART")
-            echo "UUID=${EFI_UUID}   /boot/efi  vfat  umask=0077         0  2"
-        fi
+        echo "UUID=${EFI_UUID}   /boot/efi  vfat  umask=0077         0  2"
         echo "tmpfs            /tmp     tmpfs  defaults,nosuid,nodev  0  0"
     } > "${TARGET}/etc/fstab"
 }
@@ -102,7 +97,7 @@ dbx_chroot_mounts() {
     mount -t proc  proc  "${TARGET}/proc"
     mount -t sysfs sysfs "${TARGET}/sys"
     mount --bind /run  "${TARGET}/run"
-    if [[ "$BOOT_MODE" == "uefi" ]]; then
+    if [[ -d /sys/firmware/efi/efivars ]]; then
         mount --bind /sys/firmware/efi/efivars \
             "${TARGET}/sys/firmware/efi/efivars" 2>/dev/null || true
     fi
@@ -286,24 +281,34 @@ EOF
 
     chroot "$TARGET" update-initramfs -u -k all
 
-    echo "==> [6/7] Installing GRUB bootloader..."
-    if [[ "$BOOT_MODE" == "uefi" ]]; then
-        chroot "$TARGET" grub-install \
-            --target=x86_64-efi \
-            --efi-directory=/boot/efi \
-            --bootloader-id=DebDox \
-            --no-nvram \
-            --recheck
+    echo "==> [6/7] Installing GRUB (BIOS + UEFI)..."
+    local bios_ok=0 efi_ok=0
+
+    # BIOS / Legacy: embed core.img into the bios_grub partition and write
+    # boot.img to the protective MBR. Run from the live system.
+    if grub-install --target=i386-pc --boot-directory="${TARGET}/boot" \
+            --recheck "$DISK"; then
+        bios_ok=1
+    else
+        echo "    WARN: BIOS (i386-pc) grub-install failed"
+    fi
+
+    # UEFI: install to the ESP. --no-nvram (works even when booted in BIOS
+    # mode, no efivars needed); the removable fallback path EFI/BOOT/BOOTX64.EFI
+    # makes every UEFI firmware boot it without an NVRAM entry.
+    if chroot "$TARGET" grub-install --target=x86_64-efi \
+            --efi-directory=/boot/efi --bootloader-id=DebDox \
+            --no-nvram --recheck; then
+        efi_ok=1
         mkdir -p "${TARGET}/boot/efi/EFI/BOOT"
         cp "${TARGET}/boot/efi/EFI/DebDox/grubx64.efi" \
            "${TARGET}/boot/efi/EFI/BOOT/BOOTX64.EFI" 2>/dev/null || true
     else
-        grub-install \
-            --target=i386-pc \
-            --boot-directory="${TARGET}/boot" \
-            --recheck \
-            "$DISK"
+        echo "    WARN: UEFI (x86_64-efi) grub-install failed"
     fi
+
+    [[ $bios_ok -eq 1 || $efi_ok -eq 1 ]] \
+        || { echo "ERROR: both BIOS and UEFI GRUB installs failed"; exit 1; }
 
     local kver
     kver=$(ls "${TARGET}/boot/vmlinuz-"* 2>/dev/null \
@@ -364,7 +369,7 @@ dbx_chroot_umounts() {
 
 dbx_finish() {
     echo "==> [7/7] Finalising..."
-    [[ "$BOOT_MODE" == "uefi" ]] && umount "${TARGET}/boot/efi" 2>/dev/null || true
+    umount "${TARGET}/boot/efi" 2>/dev/null || true
     umount "$TARGET" 2>/dev/null || true
 }
 
