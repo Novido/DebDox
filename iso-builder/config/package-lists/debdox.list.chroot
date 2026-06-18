@@ -43,6 +43,12 @@ python3-pip
 python3-venv
 python3-dev
 
+# Build toolchain — needed to compile libvirt-python in the venvs, and kept
+# on the system so DKMS (zfs-dkms) can rebuild modules on kernel updates.
+build-essential
+pkg-config
+libvirt-dev
+
 # Nginx (serves debdox-ui static files)
 nginx
 

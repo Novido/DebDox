@@ -11,4 +11,6 @@ websockets
 aiofiles
 aiosqlite
 sqlalchemy[asyncio]
-borgbackup
+# Note: borg is invoked as a CLI (see services/backup_service.py); the
+# borgbackup *package* is installed system-wide via apt, so it is NOT a
+# pip dependency here (avoids compiling its C extensions in the venv).
