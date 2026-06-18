@@ -62,7 +62,7 @@ debdox/
 │   ├── auto/                 # live-build auto scripts
 │   └── config/
 │       ├── package-lists/    # Packages baked into the ISO
-│       ├── hooks/chroot/     # Install scripts (KVM, Docker, ZFS, GPU…)
+│       ├── hooks/normal/     # *.hook.chroot install scripts (KVM, Docker, ZFS, GPU…)
 │       ├── includes.chroot/  # Files copied directly into the rootfs
 │       └── preseed/          # Unattended install configuration
 │

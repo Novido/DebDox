@@ -6,6 +6,7 @@ set -euo pipefail
 systemctl enable libvirtd
 
 # Allow debdox user (created later) to use libvirt without sudo
+mkdir -p /etc/polkit-1/rules.d
 cat > /etc/polkit-1/rules.d/50-libvirt.rules <<'EOF'
 polkit.addRule(function(action, subject) {
     if (action.id == "org.libvirt.unix.manage" &&

@@ -2,6 +2,8 @@
 # Configure kernel modules for DebDox
 set -euo pipefail
 
+mkdir -p /etc/modules-load.d /etc/default/grub.d
+
 cat > /etc/modules-load.d/debdox.conf <<'EOF'
 # KVM
 kvm

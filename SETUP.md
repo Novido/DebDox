@@ -48,7 +48,7 @@ One package per line. Packages are installed into the ISO's root filesystem.
 
 ### Modify install hooks
 
-The hooks in [iso-builder/config/hooks/chroot/](iso-builder/config/hooks/chroot/) run inside the chroot during build, in numbered order:
+The hooks in [iso-builder/config/hooks/normal/](iso-builder/config/hooks/normal/) run inside the chroot during build, in numbered order (live-build requires the `.hook.chroot` suffix and the `hooks/normal/` directory):
 
 | Hook | What it does |
 |---|---|
@@ -118,7 +118,7 @@ The build process takes **15–40 minutes** depending on your internet speed and
 2. Run `lb config` with the settings from `auto/config`
 3. Bootstrap a Debian 13 Trixie chroot
 4. Install all packages from `package-lists/`
-5. Run all hooks in `hooks/chroot/` in order
+5. Run all hooks in `hooks/normal/` (the `*.hook.chroot` scripts) in order
 6. Copy `includes.chroot/` into the rootfs
 7. Generate a hybrid ISO bootable via BIOS and UEFI
 
