@@ -208,7 +208,10 @@ SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 DEBDOX_ADMIN_USERNAME=${ADMIN_USER}
 DEBDOX_ADMIN_PASSWORD=${ADMIN_PASS}
 EOF
+    # The API reads this file directly (pydantic env_file) while running as
+    # the debdox user, so it must be owned by debdox — not root:root 600.
     chmod 600 "${TARGET}/etc/debdox/api.env"
+    chroot "$TARGET" chown debdox:debdox /etc/debdox/api.env 2>/dev/null || true
 
     cat > "${TARGET}/etc/debdox/system.conf" <<EOF
 LOCALE=${LOCALE}
